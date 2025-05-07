@@ -27,18 +27,13 @@ dependencies = [
     "torch",
     "torchvision",
     "click",
-    "tensorboard", # required for logging with torch.util.tensorboard
+    "tensorboard",                                 # required for logging with torch.util.tensorboard
 ]
 
 [project.optional-dependencies]
-dev = [
-    "ruff",
-]
-notebook = [
-    "ipykernel",
-    "pandas",
-    "tbparse"
-]
+dev = ["ruff"]
+results = ["pandas", "tbparse"]
+notebooks = ["ipykernel"]
 
 [project.urls]
 Homepage = "https://github.com/ratedali/benchmark_ctrs"
@@ -134,9 +129,4 @@ select = [
     # mccabe complexity
     "C90",
 ]
-ignore = [
-    "COM812",
-    "TRY003",
-    "PLR0913",
-    "PLR1714",
-]
+ignore = ["COM812", "TRY003", "PLR0913", "PLR1714"]
