@@ -1,6 +1,7 @@
 import pathlib
+from typing import cast
 
-import torch
+from torch.utils.data import TensorDataset
 from torchvision import datasets, transforms
 from typing_extensions import Literal, TypeAlias
 
@@ -75,32 +76,35 @@ class DatasetWrapper:
 
         return transforms.ToTensor()
 
-    def get_split(self, split: Split) -> torch.utils.data.Dataset[torch.Tensor]:
+    def get_split(self, split: Split) -> TensorDataset:
+        dataset = None
         if self.dataset == "mnist":
-            return datasets.MNIST(
+            dataset = datasets.MNIST(
                 root=self._data_dir,
                 train=(split == "train"),
                 download=True,
                 transform=self.get_transforms(split),
             )
         if self.dataset == "cifar10":
-            return datasets.CIFAR10(
+            dataset = datasets.CIFAR10(
                 root=self._data_dir,
                 train=(split == "train"),
                 download=True,
                 transform=self.get_transforms(split),
             )
         if self.dataset == "cifar100":
-            return datasets.CIFAR100(
+            dataset = datasets.CIFAR100(
                 root=self._data_dir,
                 train=(split == "train"),
                 download=True,
                 transform=self.get_transforms(split),
             )
         if self.dataset == "imagenet":
-            return datasets.ImageNet(
+            dataset = datasets.ImageNet(
                 root=self._data_dir,
                 split="train" if split == "train" else "val",
                 transform=self.get_transforms(split),
             )
-        raise ValueError("Invalid dataset name")
+        if dataset is None:
+            raise ValueError("Invalid dataset name")
+        return cast("TensorDataset", dataset)

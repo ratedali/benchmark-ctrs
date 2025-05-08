@@ -244,7 +244,7 @@ class TrainingRun(Generic[_Tparams]):
     def train(
         self,
         epoch: int,
-        loader: DataLoader,
+        loader: DataLoader[tuple[torch.Tensor, ...]],
     ):
         avg_data_time = AverageMetric()
         avg_batch_time = AverageMetric()
@@ -344,7 +344,7 @@ class TrainingRun(Generic[_Tparams]):
         )
 
     @torch.inference_mode()
-    def test(self, loader: DataLoader):
+    def test(self, loader: DataLoader[tuple[torch.Tensor, ...]]):
         avg_loss = AverageMetric()
         top1_acc = AverageMetric()
         top5_acc = AverageMetric()

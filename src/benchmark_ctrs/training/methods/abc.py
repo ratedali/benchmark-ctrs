@@ -67,19 +67,27 @@ class TrainingMethod(ABC, Generic[_Tparams]):
     @abstractmethod
     def train(self, ctx: TrainingContext, batch: Batch) -> BatchResults:
         """
-        Train the model for one epoch.
+        Train the model using one batch cycle.
 
         Args:
-            context (TrainingContext): All relevant
-            model (ModelWrapper): The model to be trained.
-            loader (DataLoader[torch.Tensor]): The data loader for training.
-
+            ctx (TrainingContext): contains all current training run details.
+            batch (Batch): a batch sampled from the labeled training set
 
         Returns:
-            TMetrics: The training metrics at the current epoch.
+            BatchResults: The batch predictions, training loss, and metrics for batch.
         """
 
     def test(self, ctx: TestingContext, batch: Batch) -> BatchResults:
+        """
+        Test the model performance on one data batch
+
+        Args:
+            ctx (TestingContext): contains all current training run details.
+            batch (Batch): a batch sampled from the labeled target test set
+
+        Returns:
+            BatchResults: The batch predictions, test loss, and metrics for batch.
+        """
         noisy_inputs = (
             batch.inputs
             + torch.randn_like(batch.inputs, device=ctx.device) * ctx.noise_sd
