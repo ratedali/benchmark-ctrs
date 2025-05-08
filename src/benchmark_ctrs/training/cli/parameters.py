@@ -145,6 +145,7 @@ class TrainingParametersMixin(SupportsParameters):
             click.Option(
                 ["--data-dir"],
                 type=click.Path(file_okay=False, writable=True, path_type=pathlib.Path),
+                envvar="DATASET_CACHE",
                 default=pathlib.Path(".", "datasets"),
                 help="directory to save downloaded datasets",
             ),
