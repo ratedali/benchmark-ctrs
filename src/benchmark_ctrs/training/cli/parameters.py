@@ -154,4 +154,5 @@ class TrainingParametersMixin(SupportsParameters):
                 default=False,
                 help="log the L2 gradient norms during training as a metric",
             ),
+            click.Option(["--profiling / --no-profiling"], is_flag=True, default=False),
         ]

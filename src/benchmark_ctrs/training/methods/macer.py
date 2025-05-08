@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from torch.distributions.normal import Normal
 from torch.nn import functional as F
+from torch.profiler import record_function
 from typing_extensions import TypedDict, Unpack, override
 
 from benchmark_ctrs.training.methods.abc import (
@@ -24,7 +25,6 @@ class MACERParameters(TrainingParameters):
 
 
 class _LossResult(TypedDict):
-    total: torch.Tensor
     cl: torch.Tensor
     rl: torch.Tensor
     pred: torch.Tensor
@@ -45,7 +45,7 @@ class _MACERExtraMetrics:
 def _make_batch_results(loss_result: _LossResult):
     return BatchResults(
         predictions=loss_result["pred"],
-        loss=loss_result["total"],
+        loss=loss_result["cl"] + loss_result["rl"],
         extra_metrics=_MACERExtraMetrics(
             cl=loss_result["cl"].mean().item(),
             rl=loss_result["rl"].mean().item(),
@@ -98,13 +98,16 @@ class MACERTraining(TrainingMethod[MACERParameters]):
             gamma=self.params["gamma"],
             beta=self.params["beta"],
         )
+        total_loss = loss["cl"] + loss["rl"]
 
         # compute gradient and do SGD step
         ctx.optimizer.zero_grad()
-        loss["total"].mean().backward()
+        with record_function("backprop"):
+            total_loss.mean().backward()
         ctx.optimizer.step()
 
-        return _make_batch_results(loss)
+        with torch.inference_mode():
+            return _make_batch_results(loss)
 
     @override
     def test(self, ctx, batch):
@@ -139,40 +142,43 @@ class MACERTraining(TrainingMethod[MACERParameters]):
         new_shape = [batch_size * m_train]
         new_shape.extend(batch.inputs[0].shape)
 
-        noisy_inputs = batch.inputs.repeat((1, m_train, 1, 1)).view(new_shape)
-        noisy_inputs += torch.randn_like(noisy_inputs, device=device) * sigma
+        with record_function("sampling"):
+            noisy_inputs = batch.inputs.repeat((1, m_train, 1, 1)).view(new_shape)
+            noisy_inputs += torch.randn_like(noisy_inputs, device=device) * sigma
 
-        predictions = model(noisy_inputs)
-        predictions = predictions.reshape((batch_size, m_train, -1))
+            predictions = model(noisy_inputs)
+            predictions = predictions.reshape((batch_size, m_train, -1))
 
-        # perturbed loss
-        pred_softmax = torch.softmax(predictions, dim=2).mean(1)
-        pred_logsoftmax = torch.log(pred_softmax + 1e-10)  # avoid nan
-        cl = F.nll_loss(pred_logsoftmax, batch.targets, reduction="none")
+        with record_function("classification_loss"):
+            # perturbed loss
+            pred_softmax = torch.softmax(predictions, dim=2).mean(1)
+            pred_logsoftmax = torch.log(pred_softmax + 1e-10)  # avoid nan
+            cl = F.nll_loss(pred_logsoftmax, batch.targets, reduction="none")
 
-        rl = torch.zeros_like(cl, device=device)
-        if not skip_rl and lbd != 0:
-            # only apply beta to the robustness loss
-            beta_pred = predictions * beta
-            beta_pred_softmax = torch.softmax(beta_pred, dim=2).mean(1)
+        with record_function("robust_loss"):
+            rl = torch.zeros_like(cl, device=device)
+            if not skip_rl and lbd != 0:
+                # only apply beta to the robustness loss
+                beta_pred = predictions * beta
+                beta_pred_softmax = torch.softmax(beta_pred, dim=2).mean(1)
 
-            top2 = torch.topk(beta_pred_softmax, 2)
-            pA, pB = top2.values[:, 0], top2.values[:, 1]
+                top2 = torch.topk(beta_pred_softmax, 2)
+                pA, pB = top2.values[:, 0], top2.values[:, 1]
 
-            with torch.no_grad():
-                correct = top2.indices[:, 0] == batch.targets  # G_theta
+                with torch.no_grad():
+                    correct = top2.indices[:, 0] == batch.targets  # G_theta
 
-                zeta_tmp = torch.zeros_like(rl)
-                zeta_tmp[correct] = cls.norm.icdf(pA[correct]) - cls.norm.icdf(
-                    pB[correct],
-                )
-                # apply hinge and discard nan and inf values
-                nonzero = (
-                    correct
-                    & ~torch.isnan(zeta_tmp)
-                    & ~torch.isinf(zeta_tmp)
-                    & (torch.abs(zeta_tmp) <= gamma)
-                )
-            zeta = cls.norm.icdf(pA[nonzero]) - cls.norm.icdf(pB[nonzero])
-            rl[nonzero] = sigma * (gamma - zeta) / 2
-        return _LossResult(cl=cl, rl=rl, total=cl + lbd * rl, pred=pred_softmax)
+                    zeta_tmp = torch.zeros_like(rl)
+                    zeta_tmp[correct] = cls.norm.icdf(pA[correct]) - cls.norm.icdf(
+                        pB[correct],
+                    )
+                    # apply hinge and discard nan and inf values
+                    nonzero = (
+                        correct
+                        & ~torch.isnan(zeta_tmp)
+                        & ~torch.isinf(zeta_tmp)
+                        & (torch.abs(zeta_tmp) <= gamma)
+                    )
+                zeta = cls.norm.icdf(pA[nonzero]) - cls.norm.icdf(pB[nonzero])
+                rl[nonzero] = lbd * sigma * (gamma - zeta) / 2
+        return _LossResult(cl=cl, rl=rl, pred=pred_softmax)

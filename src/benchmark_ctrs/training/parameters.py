@@ -37,3 +37,4 @@ class TrainingParameters(TypedDict):
     resume_path: Path | None
     log_freq: int
     log_grads: bool
+    profiling: bool

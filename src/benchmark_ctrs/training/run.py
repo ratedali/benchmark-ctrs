@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from contextlib import contextmanager, nullcontext
 from typing import Generic
@@ -6,6 +7,7 @@ from typing import Generic
 import torch
 from torch.optim import SGD
 from torch.optim.lr_scheduler import StepLR
+from torch.profiler import ProfilerActivity, profile, record_function, schedule
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard.writer import SummaryWriter
 from typing_extensions import TypeVar
@@ -69,7 +71,7 @@ class TrainingRun(Generic[_Tparams]):
             .resolve()
         )
         self._save = params["save"]
-        if self._save:
+        if self._save or self._params["profiling"]:
             self._save_dir.mkdir(parents=True, exist_ok=True)
 
         self._last_epoch = -1
@@ -267,63 +269,69 @@ class TrainingRun(Generic[_Tparams]):
         num_batches = len(loader)
         log_every = num_batches // self._params["log_freq"]
 
-        last_batch_end = time.perf_counter()
-        for i, data in enumerate(loader):
-            batch = Batch(data[0].to(ctx.device), data[1].to(ctx.device))
-            avg_data_time.update(time.perf_counter() - last_batch_end)
-
-            before = time.perf_counter()
-            results = self._method.train(ctx, batch)
-            avg_batch_time.update(time.perf_counter() - before)
-
-            with torch.inference_mode():
-                avg_loss.add(results.loss)
-
-                correct_top1, correct_top5 = correct_pred(
-                    results.predictions,
-                    batch.targets,
-                    ks=(1, 5),
-                )
-                top1_acc.add(correct_top1)
-                top5_acc.add(correct_top5)
-
-                if results.extra_metrics is not None:
-                    batch_size = batch.inputs.size(0)
-                    for key, val in results.extra_metrics.get_scalars().items():
-                        if key not in avg_extra:
-                            avg_extra[key] = AverageMetric()
-                        avg_extra[key].update(val, batch_size)
-
-                if self._params["log_grads"]:
-                    for (
-                        name,
-                        layer,
-                    ) in self._model_wrapper.base_model.named_children():
-                        if name not in grads:
-                            grads[name] = AverageMetric()
-                        layer_norm = torch.nn.utils.get_total_norm(
-                            p.grad.detach()
-                            for p in layer.parameters()
-                            if p.grad is not None
-                        )
-                        grads[name].update(layer_norm.item())
-
-                if (i + 1) % log_every == 0:
-                    _logger.info(
-                        "%(progress).1f%%\t"
-                        "Time %(batch_time).3gs\t"
-                        "Loss %(loss).4g\t"
-                        "Acc@1 %(train_top1).2f\t"
-                        "Acc@5 %(train_top5).2f",
-                        {
-                            "progress": (i + 1) * 100 / num_batches,
-                            "batch_time": avg_batch_time.value,
-                            "loss": avg_loss.value,
-                            "train_top1": top1_acc.value * 100,
-                            "train_top5": top5_acc.value * 100,
-                        },
-                    )
+        with (
+            self._profiling() as profiler,
+            record_function("batch_training"),
+        ):
             last_batch_end = time.perf_counter()
+            for i, data in enumerate(loader):
+                batch = Batch(data[0].to(ctx.device), data[1].to(ctx.device))
+                avg_data_time.update(time.perf_counter() - last_batch_end)
+
+                before = time.perf_counter()
+                results = self._method.train(ctx, batch)
+                avg_batch_time.update(time.perf_counter() - before)
+
+                with torch.inference_mode():
+                    avg_loss.add(results.loss)
+
+                    correct_top1, correct_top5 = correct_pred(
+                        results.predictions,
+                        batch.targets,
+                        ks=(1, 5),
+                    )
+                    top1_acc.add(correct_top1)
+                    top5_acc.add(correct_top5)
+
+                    if results.extra_metrics is not None:
+                        batch_size = batch.inputs.size(0)
+                        for key, val in results.extra_metrics.get_scalars().items():
+                            if key not in avg_extra:
+                                avg_extra[key] = AverageMetric()
+                            avg_extra[key].update(val, batch_size)
+
+                    if self._params["log_grads"]:
+                        for (
+                            name,
+                            layer,
+                        ) in self._model_wrapper.base_model.named_children():
+                            if name not in grads:
+                                grads[name] = AverageMetric()
+                            layer_norm = torch.nn.utils.get_total_norm(
+                                p.grad.detach()
+                                for p in layer.parameters()
+                                if p.grad is not None
+                            )
+                            grads[name].update(layer_norm.item())
+
+                    if (i + 1) % log_every == 0:
+                        _logger.info(
+                            "%(progress).1f%%\t"
+                            "Time %(batch_time).3gs\t"
+                            "Loss %(loss).4g\t"
+                            "Acc@1 %(train_top1).2f\t"
+                            "Acc@5 %(train_top5).2f",
+                            {
+                                "progress": (i + 1) * 100 / num_batches,
+                                "batch_time": avg_batch_time.value,
+                                "loss": avg_loss.value,
+                                "train_top1": top1_acc.value * 100,
+                                "train_top5": top5_acc.value * 100,
+                            },
+                        )
+                last_batch_end = time.perf_counter()
+                if profiler is not None:
+                    profiler.step()
 
         return Metrics(
             data_time=avg_data_time.value,
@@ -376,6 +384,33 @@ class TrainingRun(Generic[_Tparams]):
         )
 
     @contextmanager
+    def _profiling(self):
+        ctxmgr = nullcontext()
+        if self._params["profiling"]:
+
+            def handler(p: profile):
+                output = p.key_averages(
+                    group_by_input_shape=True, group_by_stack_n=5
+                ).table(sort_by=f"{self._device.type}_time_total", row_limit=50)
+                with (self._save_dir / "profiling.log").open("ta") as logfile:
+                    logfile.write(f"Torch profiling step {p.step_num}:" + os.linesep)
+                    logfile.write(output)
+                p.export_chrome_trace(str(self._save_dir / f"trace_{p.step_num}.json"))
+
+            activities = [ProfilerActivity.CPU]
+            if self._device.type == "cuda":
+                activities.append(ProfilerActivity.CUDA)
+            ctxmgr = profile(
+                activities=activities,
+                record_shapes=True,
+                with_stack=True,
+                schedule=schedule(skip_first=1, wait=10, warmup=10, active=5),
+                on_trace_ready=handler,
+            )
+        with ctxmgr as p:
+            yield p
+
+    @contextmanager
     def _setup_logging(self):
         handler = None
         if self._save:
@@ -393,7 +428,7 @@ class TrainingRun(Generic[_Tparams]):
                 handler.close()
 
     def _tensorboard(self):
-        if self._save is not None:
+        if self._save:
             return SummaryWriter(
                 log_dir=str(self._save_dir),
             )
