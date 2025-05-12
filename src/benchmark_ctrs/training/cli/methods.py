@@ -1,4 +1,3 @@
-from email.errors import HeaderParseError
 import click
 
 from benchmark_ctrs.cli.parameters import SupportsParameters

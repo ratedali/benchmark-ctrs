@@ -384,15 +384,18 @@ class TrainingRun(Generic[_Tparams]):
         )
 
     @contextmanager
-    def _profiling(self):
+    def _profiling(self, skip_first=1, wait=10, warmup=10, active=5):
         ctxmgr = nullcontext()
         if self._params["profiling"]:
+            profiling_log = self._save_dir / "profiling.log"
+            with profiling_log.open("w"):
+                pass
 
             def handler(p: profile):
-                output = p.key_averages(
-                    group_by_input_shape=True, group_by_stack_n=5
-                ).table(sort_by=f"{self._device.type}_time_total", row_limit=50)
-                with (self._save_dir / "profiling.log").open("ta") as logfile:
+                output = p.key_averages(group_by_input_shape=True).table(
+                    sort_by=f"self_{self._device.type}_time_total"
+                )
+                with profiling_log.open("a") as logfile:
                     logfile.write(f"Torch profiling step {p.step_num}:" + os.linesep)
                     logfile.write(output)
                 p.export_chrome_trace(str(self._save_dir / f"trace_{p.step_num}.json"))
@@ -403,8 +406,12 @@ class TrainingRun(Generic[_Tparams]):
             ctxmgr = profile(
                 activities=activities,
                 record_shapes=True,
-                with_stack=True,
-                schedule=schedule(skip_first=1, wait=10, warmup=10, active=5),
+                schedule=schedule(
+                    skip_first=skip_first,
+                    wait=wait,
+                    warmup=warmup,
+                    active=active,
+                ),
                 on_trace_ready=handler,
             )
         with ctxmgr as p:
