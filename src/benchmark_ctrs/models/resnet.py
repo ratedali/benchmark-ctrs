@@ -1,13 +1,16 @@
 # Based on code publicly available at
 # https://raw.githubusercontent.com/bearpaw/pytorch-classification/master/models/cifar/resnet.py
 # by Wei Yang
+from __future__ import annotations
 
 import math
 
-from torch import nn
+import lightning as L
+from torch import Tensor, nn
+from typing_extensions import Literal
 
 
-def _conv3x3(in_planes, out_planes, stride=1):
+def __conv3x3(in_planes, out_planes, stride=1):
     "3x3 convolution with padding"
     return nn.Conv2d(
         in_planes,
@@ -24,15 +27,16 @@ class _BasicBlock(nn.Module):
 
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super().__init__()
-        self.conv1 = _conv3x3(inplanes, planes, stride)
+
+        self.conv1 = __conv3x3(inplanes, planes, stride)
         self.bn1 = nn.BatchNorm2d(planes)
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = _conv3x3(planes, planes)
+        self.conv2 = __conv3x3(planes, planes)
         self.bn2 = nn.BatchNorm2d(planes)
         self.downsample = downsample
         self.stride = stride
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         residual = x
 
         out = self.conv1(x)
@@ -52,8 +56,15 @@ class _BasicBlock(nn.Module):
 class _Bottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None):
+    def __init__(
+        self,
+        inplanes: int,
+        planes: int,
+        stride: int = 1,
+        downsample: nn.Module | None = None,
+    ):
         super().__init__()
+
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm2d(planes)
         self.conv2 = nn.Conv2d(
@@ -71,7 +82,7 @@ class _Bottleneck(nn.Module):
         self.downsample = downsample
         self.stride = stride
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         residual = x
 
         out = self.conv1(x)
@@ -92,28 +103,34 @@ class _Bottleneck(nn.Module):
         return self.relu(out)
 
 
-class ResNet(nn.Module):
-    def __init__(self, depth, num_classes=1000, block_name="BasicBlock"):
+class ResNet(L.LightningModule):
+    def __init__(
+        self,
+        depth: int,
+        num_classes: int = 1000,
+        block_name: Literal["BasicBlock", "Bottleneck"] = "BasicBlock",
+    ):
         super().__init__()
+
         # Model type specifies number of layers for CIFAR-10 model
-        if block_name.lower() == "basicblock":
+        if block_name == "BasicBlock":
             if (depth - 2) % 6 != 0:
                 raise ValueError(
-                    "When use basicblock, depth should be 6n+2, "
+                    "When use BasicBlock, depth should be 6n+2, "
                     "e.g. 20, 32, 44, 56, 110, 1202",
                 )
             n = (depth - 2) // 6
             block = _BasicBlock
-        elif block_name.lower() == "bottleneck":
+        elif block_name == "Bottleneck":
             if (depth - 2) % 9 != 0:
                 raise ValueError(
-                    "When use bottleneck, depth should be 9n+2, "
+                    "When use Bottleneck, depth should be 9n+2, "
                     "e.g. 20, 29, 47, 56, 110, 1199",
                 )
             n = (depth - 2) // 9
             block = _Bottleneck
         else:
-            raise ValueError("block_name shoule be Basicblock or Bottleneck")
+            raise ValueError("block_name shoule be BasicBlock or Bottleneck")
 
         self.inplanes = 16
         self.conv1 = nn.Conv2d(3, 16, kernel_size=3, padding=1, bias=False)
@@ -153,7 +170,7 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
 
-    def forward(self, x):
+    def forward(self, x: Tensor) -> Tensor:
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)  # 32x32
@@ -165,10 +182,3 @@ class ResNet(nn.Module):
         x = self.avgpool(x)
         x = x.view(x.size(0), -1)
         return self.fc(x)
-
-
-def resnet(**kwargs):
-    """
-    Constructs a ResNet model.
-    """
-    return ResNet(**kwargs)

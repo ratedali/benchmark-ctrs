@@ -187,5 +187,5 @@ pyrightconfig.json
 # End of https://www.toptal.com/developers/gitignore/api/python,jupyternotebooks
 
 **/*.pth.tar
-/datasets
+/datasets_cache
 /runs

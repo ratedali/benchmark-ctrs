@@ -2,6 +2,7 @@
 # https://github.com/alinlab/smoothing-catrs
 #
 # Github Permalink: https://github.com/alinlab/smoothing-catrs/blob/d4bc576e7d373d158f087ba5744af8bb48466bb7/code/datasets.py#L257
+
 from __future__ import annotations
 
 import torch
@@ -22,7 +23,7 @@ def normalize(
     shape = [1] * x.dim()
     shape[chls_i] = x.size(chls_i)
 
-    return (x - mean.view(shape)) / sd.view(shape)
+    return (x - mean.to(x).view(shape)) / sd.to(x).view(shape)
 
 
 class Normalization(torch.nn.Module):

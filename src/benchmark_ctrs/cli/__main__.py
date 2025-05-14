@@ -1,40 +1,43 @@
-import logging
-import sys
+from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
+from typing_extensions import override
 
-import click
-
-from benchmark_ctrs.training.cli import train
-
-_logger = logging.getLogger(__name__)
+from benchmark_ctrs import datasets, modules
+from benchmark_ctrs.datasets import *  # noqa: F403
+from benchmark_ctrs.modules import *  # noqa: F403
 
 
-@click.group()
-@click.option("--verbose", is_flag=True)
-def main(verbose: bool):  # noqa: FBT001
-    rootLogger = logging.getLogger()
-    rootLogger.setLevel(logging.DEBUG if verbose else logging.INFO)
+def main():
+    BenchmarkCTRSCLI(
+        model_class=modules.RSTrainingModule,
+        subclass_mode_model=True,
+        datamodule_class=datasets.ClassificationDataModule,
+        subclass_mode_data=True,
+        parser_kwargs={"default_env": True},
+    )
 
-    if not rootLogger.handlers:
-        simple_fmt = logging.Formatter("%(message)s")
-        verbose_fmt = logging.Formatter(
-            "[%(asctime)s - %(name)s - %(levelname)s] %(message)s",
+
+class BenchmarkCTRSCLI(LightningCLI):
+    @override
+    def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
+        # Link values from the data module to the training module
+        parser.link_arguments(
+            "data.classes", "model.init_args.num_classes", apply_on="instantiate"
         )
-
-        info_handler = logging.StreamHandler(sys.stdout)
-        info_handler.setFormatter(simple_fmt if not verbose else verbose_fmt)
-        info_handler.setLevel(logging.INFO)
-        rootLogger.addHandler(info_handler)
-
-        if verbose:
-            verbose_handler = logging.StreamHandler(sys.stderr)
-            verbose_handler.setFormatter(verbose_fmt)
-            verbose_handler.setLevel(logging.DEBUG)
-            rootLogger.addHandler(verbose_handler)
-
-    _logger.debug("command executed")
-
-
-main.add_command(train)
+        parser.link_arguments(
+            "data.means", "model.init_args.means", apply_on="instantiate"
+        )
+        parser.link_arguments("data.sds", "model.init_args.sds", apply_on="instantiate")
+        parser.link_arguments(
+            "data.default_arch",
+            "model.init_args.arch",
+            apply_on="instantiate",
+        )
+        parser.link_arguments(
+            "data.dataset",
+            "model.init_args.is_imagenet",
+            compute_fn=lambda dataset: dataset == datasets.ImageNet,
+            apply_on="instantiate",
+        )
 
 
 if __name__ == "__main__":
