@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import lightning as L
 import torch
+import torchmetrics
+import torchmetrics.aggregation
+import torchmetrics.classification
 from torch.optim import SGD
 from torchvision.models import resnet50
 from typing_extensions import override
@@ -12,9 +16,9 @@ from typing_extensions import override
 from benchmark_ctrs.models import (
     Architectures,
     LeNet,
-    Normalization,
     ResNet,
 )
+from benchmark_ctrs.models.layers import Normalization
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -27,7 +31,7 @@ if TYPE_CHECKING:
         OptimizerLRSchedulerConfig,
     )
     from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
-    from typing_extensions import TypeAlias
+    from typing_extensions import TypeAlias, TypeIs
 
     CONFIGURE_OPTIMIZERS: TypeAlias = Union[
         torch.optim.Optimizer,
@@ -42,6 +46,7 @@ if TYPE_CHECKING:
         Sequence[OptimizerLRSchedulerConfig],
         None,
     ]
+    Batch: TypeAlias = tuple[torch.Tensor, ...]
 
 
 @dataclass(frozen=True)
@@ -50,7 +55,20 @@ class HParams:
     learning_rate: float = 0.1
 
 
-class RSTrainingModule(L.LightningModule):
+class StepOutput(TypedDict):
+    loss: torch.Tensor
+    predictions: torch.Tensor
+
+
+def is_valid_step_output(value: Any) -> TypeIs[StepOutput]:
+    return (
+        isinstance(value, dict)
+        and isinstance(value.get("loss"), torch.Tensor)
+        and isinstance(value.get("predictions"), torch.Tensor)
+    )
+
+
+class RSTrainingModule(L.LightningModule, ABC):
     def __init__(
         self,
         *,
@@ -70,6 +88,19 @@ class RSTrainingModule(L.LightningModule):
         self.__arch = arch
         self.__means = means
         self.__sds = sds
+
+        self._train_metrics = torchmetrics.MetricCollection(
+            {
+                "accuracy": torchmetrics.classification.Accuracy(
+                    task="multiclass", num_classes=self._num_classes
+                )
+            },
+            prefix="train_",
+        )
+        self._train_loss = torchmetrics.aggregation.MeanMetric()
+
+        self._val_metrics = self._train_metrics.clone(prefix="val_")
+        self._val_loss = torchmetrics.aggregation.MeanMetric()
 
     @override
     def setup(self, stage: str) -> None:
@@ -97,23 +128,106 @@ class RSTrainingModule(L.LightningModule):
         return SGD(self.parameters(), self.hparams["learning_rate"])
 
     @override
+    def on_train_batch_end(
+        self, outputs: STEP_OUTPUT, batch: Batch, batch_idx: int
+    ) -> None:
+        super().on_train_batch_end(outputs, batch, batch_idx)
+        self._log_batch_metrics(
+            outputs,
+            batch,
+            prefix="train_",
+            loss_metric=self._train_loss,
+            acc_metrics=self._train_metrics,
+        )
+
+    @override
+    def on_validation_batch_end(
+        self,
+        outputs: STEP_OUTPUT,
+        batch: Batch,
+        batch_idx: int,
+        dataloader_idx: int = 0,
+    ) -> None:
+        super().on_validation_batch_end(outputs, batch, batch_idx, dataloader_idx)
+        self._log_batch_metrics(
+            outputs,
+            batch,
+            prefix="val_",
+            loss_metric=self._val_loss,
+            acc_metrics=self._val_metrics,
+        )
+
+    def _log_batch_metrics(
+        self,
+        outputs: STEP_OUTPUT,
+        batch: Batch,
+        *,
+        prefix: str,
+        loss_metric: torchmetrics.Metric,
+        acc_metrics: torchmetrics.MetricCollection,
+    ):
+        if not is_valid_step_output(outputs):
+            raise ValueError(
+                "step output must be a dict with the tensors "
+                f"'loss' and 'predictions', got value: {outputs}"
+            )
+
+        loss_metric.update(outputs["loss"])
+        self.log(
+            f"{prefix}loss",
+            loss_metric,
+            prog_bar=True,
+            on_epoch=True,
+            on_step=True,
+        )
+
+        _inputs, targets = batch
+        acc_metrics.update(outputs["predictions"], targets)
+        self.log_dict(acc_metrics, prog_bar=True, on_epoch=True, on_step=True)
+
+    @override
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        inputs = inputs + torch.randn_like(inputs) * self.hparams["sigma"]
         return self._model(inputs)
 
     @override
-    def validation_step(self, batch: tuple[torch.Tensor, ...]) -> STEP_OUTPUT:
-        inputs, targets = batch
-        inputs = inputs + torch.randn_like(inputs) * self.hparams["sigma"]
-
-        # compute predictions and loss
-        predictions: torch.Tensor = self.forward(inputs)
-        return self._criterion(predictions, targets)
+    @abstractmethod
+    def training_step(
+        self,
+        batch: Batch,
+        batch_idx: int,
+        dataloader_idx: int | None = None,
+    ) -> StepOutput: ...
 
     @override
-    def test_step(self, batch: tuple[torch.Tensor, ...]) -> STEP_OUTPUT:
-        inputs, targets = batch
-        inputs = inputs + torch.randn_like(inputs).to(inputs) * self.hparams["sigma"]
+    def validation_step(
+        self,
+        batch: Batch,
+        batch_idx: int,
+        dataloader_idx: int | None = None,
+    ) -> StepOutput:
+        return self._default_eval_step(batch)
 
-        # compute predictions and loss
-        predictions: torch.Tensor = self.forward(inputs)
-        return self._criterion(predictions, targets)
+    @override
+    def test_step(
+        self,
+        batch: Batch,
+        batch_idx: int,
+        dataloader_idx: int | None = None,
+    ) -> StepOutput:
+        return self._default_eval_step(batch)
+
+    def predict_step(
+        self,
+        batch: Batch,
+        batch_idx: int,
+        dataloader_idx: int | None = None,
+    ):
+        predictions = self._model(batch)
+        return torch.argmax(predictions, dim=1)
+
+    def _default_eval_step(self, batch: Batch) -> StepOutput:
+        inputs, targets = batch
+        predictions = self.forward(inputs)
+        loss = self._criterion(predictions, targets)
+        return {"loss": loss, "predictions": predictions}

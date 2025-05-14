@@ -1,6 +1,5 @@
 from enum import Enum
 
-from benchmark_ctrs.models.layers import Normalization, normalize
 from benchmark_ctrs.models.lenet import LeNet
 from benchmark_ctrs.models.resnet import ResNet
 
@@ -11,10 +10,4 @@ class Architectures(Enum):
     Resnet_110 = "resnet110"
 
 
-__all__ = [
-    "Architectures",
-    "LeNet",
-    "Normalization",
-    "ResNet",
-    "normalize",
-]
+__all__ = ["LeNet", "ResNet"]

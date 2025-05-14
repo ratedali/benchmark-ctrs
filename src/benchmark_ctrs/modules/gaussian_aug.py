@@ -1,21 +1,21 @@
-import torch
-from lightning.pytorch.utilities.types import STEP_OUTPUT
-from torch import Tensor
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from typing_extensions import override
 
-from benchmark_ctrs.modules.rs_training import RSTrainingModule
+from benchmark_ctrs.modules.rs_training import RSTrainingModule, StepOutput
+
+if TYPE_CHECKING:
+    from benchmark_ctrs.modules.rs_training import Batch
 
 
 class GaussianAug(RSTrainingModule):
     @override
-    def training_step(self, batch: tuple[Tensor, ...]) -> STEP_OUTPUT:
-        inputs, targets = batch
-        inputs = inputs + torch.randn_like(inputs) * self.hparams["sigma"]
-
-        # compute predictions and loss
-        predictions = self.forward(inputs)
-        loss = self._criterion(predictions, targets)
-        return {
-            "prediction": predictions,
-            "loss": loss,
-        }
+    def training_step(
+        self,
+        batch: Batch,
+        batch_idx: int,
+        dataloader_idx: int | None = None,
+    ) -> StepOutput:
+        return self._default_eval_step(batch)
