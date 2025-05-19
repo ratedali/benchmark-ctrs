@@ -201,7 +201,7 @@ class RSTrainingModule(L.LightningModule, ABC):
 
         _inputs, targets = batch
         acc_metrics(outputs["predictions"], targets)
-        self.log_dict(acc_metrics, prog_bar=True, on_epoch=True)
+        self.log_dict(acc_metrics, on_epoch=True)
 
     @override
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
