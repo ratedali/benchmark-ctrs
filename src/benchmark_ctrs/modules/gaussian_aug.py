@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from typing_extensions import override
 
-from benchmark_ctrs.modules.rs_training import RSTrainingModule, StepOutput
+from benchmark_ctrs.modules.rs_training import HParams, RSTrainingModule
 
 if TYPE_CHECKING:
-    from benchmark_ctrs.modules.rs_training import Batch
+    from benchmark_ctrs.modules.rs_training import Batch, StepOutput
+
+
+@dataclass(frozen=True)
+class GaussianAugHParams(HParams):
+    learning_rate: float = 0.1
 
 
 class GaussianAug(RSTrainingModule):

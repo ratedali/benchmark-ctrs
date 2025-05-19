@@ -53,7 +53,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class HParams:
     sigma: float
-    learning_rate: float = 0.1
+    learning_rate: float
 
 
 class StepOutput(TypedDict):
@@ -96,12 +96,12 @@ class RSTrainingModule(L.LightningModule, ABC):
                     task="multiclass", num_classes=self._num_classes
                 )
             },
-            prefix="train_",
+            prefix="train/",
         )
         self._train_loss = torchmetrics.aggregation.MeanMetric()
         self._batch_time = torchmetrics.aggregation.MeanMetric()
 
-        self._val_metrics = self._train_metrics.clone(prefix="val_")
+        self._val_metrics = self._train_metrics.clone(prefix="val/")
         self._val_loss = torchmetrics.aggregation.MeanMetric()
 
     @override
@@ -152,9 +152,9 @@ class RSTrainingModule(L.LightningModule, ABC):
         self._log_batch_metrics(
             outputs,
             batch,
-            prefix="train_",
             loss_metric=self._train_loss,
             acc_metrics=self._train_metrics,
+            prefix=self._train_metrics.prefix,
         )
         self._batch_time(time.perf_counter() - self._batch_start)
         self.log("batch_time", self._batch_time, on_epoch=True)
@@ -171,9 +171,9 @@ class RSTrainingModule(L.LightningModule, ABC):
         self._log_batch_metrics(
             outputs,
             batch,
-            prefix="val_",
             loss_metric=self._val_loss,
             acc_metrics=self._val_metrics,
+            prefix=self._val_metrics.prefix,
         )
 
     def _log_batch_metrics(
@@ -181,7 +181,7 @@ class RSTrainingModule(L.LightningModule, ABC):
         outputs: STEP_OUTPUT,
         batch: Batch,
         *,
-        prefix: str,
+        prefix: str | None,
         loss_metric: torchmetrics.Metric,
         acc_metrics: torchmetrics.MetricCollection,
     ):
@@ -193,7 +193,7 @@ class RSTrainingModule(L.LightningModule, ABC):
 
         loss_metric(outputs["loss"])
         self.log(
-            f"{prefix}loss",
+            f"{prefix or ''}loss",
             loss_metric,
             prog_bar=True,
             on_epoch=True,
