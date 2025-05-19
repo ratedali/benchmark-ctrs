@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any, TypedDict
@@ -98,6 +99,7 @@ class RSTrainingModule(L.LightningModule, ABC):
             prefix="train_",
         )
         self._train_loss = torchmetrics.aggregation.MeanMetric()
+        self._batch_time = torchmetrics.aggregation.MeanMetric()
 
         self._val_metrics = self._train_metrics.clone(prefix="val_")
         self._val_loss = torchmetrics.aggregation.MeanMetric()
@@ -128,6 +130,21 @@ class RSTrainingModule(L.LightningModule, ABC):
         return SGD(self.parameters(), self.hparams["learning_rate"])
 
     @override
+    def on_train_epoch_start(self) -> None:
+        super().on_train_epoch_start()
+        self._epoch_start = time.perf_counter()
+
+    @override
+    def on_train_epoch_end(self) -> None:
+        super().on_train_epoch_end()
+        self.log("epoch_time", time.perf_counter() - self._epoch_start)
+
+    @override
+    def on_train_batch_start(self, batch: Any, batch_idx: int) -> int | None:
+        self._batch_start = time.perf_counter()
+        return super().on_train_batch_start(batch, batch_idx)
+
+    @override
     def on_train_batch_end(
         self, outputs: STEP_OUTPUT, batch: Batch, batch_idx: int
     ) -> None:
@@ -139,6 +156,8 @@ class RSTrainingModule(L.LightningModule, ABC):
             loss_metric=self._train_loss,
             acc_metrics=self._train_metrics,
         )
+        self._batch_time(time.perf_counter() - self._batch_start)
+        self.log("batch_time", self._batch_time, on_epoch=True)
 
     @override
     def on_validation_batch_end(
@@ -172,18 +191,17 @@ class RSTrainingModule(L.LightningModule, ABC):
                 f"'loss' and 'predictions', got value: {outputs}"
             )
 
-        loss_metric.update(outputs["loss"])
+        loss_metric(outputs["loss"])
         self.log(
             f"{prefix}loss",
             loss_metric,
             prog_bar=True,
             on_epoch=True,
-            on_step=True,
         )
 
         _inputs, targets = batch
-        acc_metrics.update(outputs["predictions"], targets)
-        self.log_dict(acc_metrics, prog_bar=True, on_epoch=True, on_step=True)
+        acc_metrics(outputs["predictions"], targets)
+        self.log_dict(acc_metrics, prog_bar=True, on_epoch=True)
 
     @override
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:

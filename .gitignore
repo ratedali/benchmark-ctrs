@@ -188,4 +188,4 @@ pyrightconfig.json
 
 **/*.pth.tar
 /datasets_cache
-/runs
+/logs

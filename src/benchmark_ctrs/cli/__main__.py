@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
 from typing_extensions import override
 
@@ -12,7 +14,14 @@ def main():
         subclass_mode_model=True,
         datamodule_class=datasets.ClassificationDataModule,
         subclass_mode_data=True,
-        parser_kwargs={"default_env": True},
+        parser_kwargs={
+            "default_env": True,
+            "fit": {
+                "default_config_files": [
+                    Path(__file__).parent / "default_config_fit.yml"
+                ]
+            },
+        },
     )
 
 
