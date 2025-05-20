@@ -10,7 +10,7 @@ from benchmark_ctrs.modules import *  # noqa: F403
 
 def main():
     BenchmarkCTRSCLI(
-        model_class=modules.RSTrainingModule,
+        model_class=modules.RandomizedSmoothing,
         subclass_mode_model=True,
         datamodule_class=datasets.ClassificationDataModule,
         subclass_mode_data=True,

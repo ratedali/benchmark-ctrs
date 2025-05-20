@@ -1,25 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import dataclasses
 from typing import TYPE_CHECKING, cast
 
 import torch
 import torch.nn.functional as F
-import torchmetrics
-import torchmetrics.aggregation
 from torch.distributions import Normal
 from torch.profiler import record_function
-from typing_extensions import Literal, override
+from torchmetrics.aggregation import MeanMetric
+from typing_extensions import override
 
-from benchmark_ctrs.modules.rs_training import (
-    Batch,
-    HParams,
-    RSTrainingModule,
-    StepOutput,
-)
+from benchmark_ctrs.modules.rs_training import HParams, RandomizedSmoothing
 
 if TYPE_CHECKING:
     from torch import Tensor
+    from typing_extensions import Literal
 
     from benchmark_ctrs.modules.rs_training import (
         Batch,
@@ -27,7 +22,7 @@ if TYPE_CHECKING:
     )
 
 
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class MACERHParams(HParams):
     learning_rate: float = 0.01
     lr_decay: float = 0.1
@@ -40,7 +35,7 @@ class MACERHParams(HParams):
     gamma: float = 8
 
 
-class MACER(RSTrainingModule):
+class MACER(RandomizedSmoothing):
     def __init__(
         self,
         *args,
@@ -50,12 +45,12 @@ class MACER(RSTrainingModule):
         super().__init__(*args, **kwargs, params=params)
         self._norm = Normal(0.0, 1.0)
         self._cl = {
-            "train": torchmetrics.aggregation.MeanMetric(),
-            "val": torchmetrics.aggregation.MeanMetric(),
+            "train": MeanMetric(),
+            "val": MeanMetric(),
         }
         self._rl = {
-            "train": torchmetrics.aggregation.MeanMetric(),
-            "val": torchmetrics.aggregation.MeanMetric(),
+            "train": MeanMetric(),
+            "val": MeanMetric(),
         }
 
     @override

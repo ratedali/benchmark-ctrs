@@ -13,7 +13,7 @@ from typing_extensions import Literal, override
 from benchmark_ctrs.modules.rs_training import (
     Batch,
     HParams,
-    RSTrainingModule,
+    RandomizedSmoothing,
     StepOutput,
 )
 
@@ -37,7 +37,7 @@ class ADREHParams(HParams):
     adversarial: bool = False
 
 
-class ADRE(RSTrainingModule):
+class ADRE(RandomizedSmoothing):
     def __init__(
         self,
         *args,

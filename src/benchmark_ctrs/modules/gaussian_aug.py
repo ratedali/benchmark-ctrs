@@ -5,7 +5,9 @@ from typing import TYPE_CHECKING
 
 from typing_extensions import override
 
-from benchmark_ctrs.modules.rs_training import HParams, RSTrainingModule
+from benchmark_ctrs.models import Architectures
+from benchmark_ctrs.models.smooth import HParams
+from benchmark_ctrs.modules.rs_training import HParams, RandomizedSmoothing
 
 if TYPE_CHECKING:
     from benchmark_ctrs.modules.rs_training import Batch, StepOutput
@@ -16,7 +18,10 @@ class GaussianAugHParams(HParams):
     learning_rate: float = 0.1
 
 
-class GaussianAug(RSTrainingModule):
+class GaussianAug(RandomizedSmoothing):
+    def __init__(self, *args, params: GaussianAugHParams, **kwargs) -> None:
+        super().__init__(*args, params=params, **kwargs)
+
     @override
     def training_step(
         self,

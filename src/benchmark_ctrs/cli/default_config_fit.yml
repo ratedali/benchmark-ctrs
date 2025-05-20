@@ -11,7 +11,7 @@ trainer:
       init_args:
         save_last: true
         save_on_train_epoch_end: false
-        monitor: val_loss
+        monitor: val/loss
         mode: min
   logger:
     - class_path: lightning.pytorch.loggers.tensorboard.TensorBoardLogger
