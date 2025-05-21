@@ -17,7 +17,7 @@ from typing_extensions import Literal, TypeAlias
 
 
 class _ABSTAIN_TYPE:
-    pass
+    ...
 
 
 ABSTAIN = _ABSTAIN_TYPE()
