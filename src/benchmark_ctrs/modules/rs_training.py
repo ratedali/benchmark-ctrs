@@ -9,6 +9,7 @@ import lightning as L
 import torch
 from torch import Tensor
 from torch.optim import SGD
+from torch.optim.lr_scheduler import StepLR
 from torchmetrics import Metric, MetricCollection
 from torchmetrics.aggregation import MeanMetric
 from torchmetrics.classification import Accuracy
@@ -58,6 +59,10 @@ if TYPE_CHECKING:
 class HParams:
     sigma: float
     learning_rate: float
+    lr_decay: float
+    lr_step: float
+    momentum: float
+    weight_decay: float
 
 
 class StepOutput(TypedDict):
@@ -160,7 +165,18 @@ class RandomizedSmoothing(L.LightningModule, ABC):
 
     @override
     def configure_optimizers(self) -> CONFIGURE_OPTIMIZERS:
-        return SGD(self.parameters(), self.hparams["learning_rate"])
+        optimizer = SGD(
+            self.parameters(),
+            lr=self.hparams_initial.learning_rate,
+            momentum=self.hparams_initial.momentum,
+            weight_decay=self.hparams_initial.weight_decay,
+        )
+        scheduler = StepLR(
+            optimizer,
+            step_size=self.hparams_initial.lr_step,
+            gamma=self.hparams_initial.lr_decay,
+        )
+        return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
     @override
     def forward(self, inputs: Tensor) -> Tensor:

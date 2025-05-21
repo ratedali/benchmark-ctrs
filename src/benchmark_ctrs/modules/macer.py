@@ -27,6 +27,8 @@ class MACERHParams(HParams):
     learning_rate: float = 0.01
     lr_decay: float = 0.1
     lr_step: int = 50
+    momentum: float = 0.9
+    weight_decay: float = 1e-4
     deferred: bool = True
 
     k: int = 16
