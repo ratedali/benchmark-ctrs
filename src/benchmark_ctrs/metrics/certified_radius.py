@@ -83,11 +83,13 @@ class CertifiedRadius(Metric):
 
     def compute(self) -> Tensor | tuple[Tensor, Tensor]:
         radii = dim_zero_cat(self._radii)
+        if self._reduction == "none":
+            indices = dim_zero_cat(self._indices)
+            return indices, radii
+        if radii.numel() == 0:
+            return torch.tensor(0.0).to(radii)
         if self._reduction == "max":
             return radii.max()
         if self._reduction == "min":
             return radii.min()
-        if self._reduction == "none":
-            indices = dim_zero_cat(self._indices)
-            return indices, radii
         return radii.mean()
