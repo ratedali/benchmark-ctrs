@@ -10,7 +10,7 @@ from torch import Tensor, nn
 from typing_extensions import Literal
 
 
-def __conv3x3(in_planes, out_planes, stride=1):
+def _conv3x3(in_planes, out_planes, stride=1):
     "3x3 convolution with padding"
     return nn.Conv2d(
         in_planes,
@@ -28,10 +28,10 @@ class _BasicBlock(nn.Module):
     def __init__(self, inplanes, planes, stride=1, downsample=None):
         super().__init__()
 
-        self.conv1 = __conv3x3(inplanes, planes, stride)
+        self.conv1 = _conv3x3(inplanes, planes, stride)
         self.bn1 = nn.BatchNorm2d(planes)
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = __conv3x3(planes, planes)
+        self.conv2 = _conv3x3(planes, planes)
         self.bn2 = nn.BatchNorm2d(planes)
         self.downsample = downsample
         self.stride = stride
