@@ -32,10 +32,8 @@ class ClassificationDataModule(L.LightningDataModule, ABC):
         cache_dir: Path | None = None,
     ):
         super().__init__()
-
-        self._batch_size = batch_size
-        self._workers = workers
         self._cache_dir = cache_dir or ClassificationDataModule.__default_cache_dir
+        self.save_hyperparameters(ignore="cache_dir")
 
         self._train: Dataset | None = None
         self._val: Dataset | None = None
@@ -68,8 +66,8 @@ class ClassificationDataModule(L.LightningDataModule, ABC):
             raise ValueError("Training split not initialized")
         return DataLoader(
             self._train,
-            batch_size=self._batch_size,
-            num_workers=self._workers,
+            batch_size=self.hparams["batch_size"],
+            num_workers=self.hparams["workers"],
         )
 
     @override
@@ -78,8 +76,8 @@ class ClassificationDataModule(L.LightningDataModule, ABC):
             raise ValueError("Validation split not initialized")
         return DataLoader(
             self._val,
-            batch_size=self._batch_size,
-            num_workers=self._workers,
+            batch_size=self.hparams["batch_size"],
+            num_workers=self.hparams["workers"],
         )
 
     @override
@@ -88,8 +86,8 @@ class ClassificationDataModule(L.LightningDataModule, ABC):
             raise ValueError("Testing split not initialized")
         return DataLoader(
             self._test,
-            batch_size=self._batch_size,
-            num_workers=self._workers,
+            batch_size=self.hparams["batch_size"],
+            num_workers=self.hparams["workers"],
         )
 
     @override
@@ -98,6 +96,6 @@ class ClassificationDataModule(L.LightningDataModule, ABC):
             raise ValueError("Testing split not initialized")
         return DataLoader(
             self._predict,
-            batch_size=self._batch_size,
-            num_workers=self._workers,
+            batch_size=self.hparams["batch_size"],
+            num_workers=self.hparams["workers"],
         )

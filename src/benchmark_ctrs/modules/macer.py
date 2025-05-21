@@ -46,14 +46,10 @@ class MACER(RandomizedSmoothing):
     ) -> None:
         super().__init__(*args, **kwargs, params=params)
         self._norm = Normal(0.0, 1.0)
-        self._cl = {
-            "train": MeanMetric(),
-            "val": MeanMetric(),
-        }
-        self._rl = {
-            "train": MeanMetric(),
-            "val": MeanMetric(),
-        }
+        self._cl_train = MeanMetric()
+        self._cl_val = MeanMetric()
+        self._rl_train = MeanMetric()
+        self._rl_val = MeanMetric()
 
     @override
     def training_step(
@@ -65,7 +61,7 @@ class MACER(RandomizedSmoothing):
         skip_rl = (
             self.hparams["deferred"] and self.current_epoch < self.hparams["lr_step"]
         )
-        return self._loss(batch, skip_rl=skip_rl, prefix="train")
+        return self._loss(batch, skip_rl=skip_rl, stage="train")
 
     @override
     def validation_step(
@@ -74,14 +70,14 @@ class MACER(RandomizedSmoothing):
         batch_idx: int,
         dataloader_idx: int | None = None,
     ) -> StepOutput:
-        return self._loss(batch, prefix="val")
+        return self._loss(batch, stage="val")
 
     def _loss(
         self,
         batch: Batch,
         *,
         skip_rl: bool = False,
-        prefix: Literal["train", "val"] | None = None,
+        stage: Literal["train", "val"] | None = None,
     ) -> StepOutput:
         hparams = cast("MACERHParams", self.hparams)
         inputs, targets = batch
@@ -101,7 +97,7 @@ class MACER(RandomizedSmoothing):
             cl = F.nll_loss(pred_logsoftmax, targets, reduction="mean")
 
         with record_function("robust_loss"):
-            rl = torch.zeros_like(targets)
+            rl = torch.zeros((targets.numel(),)).to(inputs)
             if not skip_rl and hparams.lbd != 0:
                 # only apply beta to the robustness loss
                 beta_pred = predictions * hparams.beta
@@ -128,11 +124,16 @@ class MACER(RandomizedSmoothing):
                 rl[nonzero] = hparams.sigma * (hparams.gamma - zeta) / 2
             rl = rl.mean()
 
-        if prefix is not None:
-            self._cl[prefix](cl)
-            self._rl[prefix](rl)
-            self.log("{prefix}/classification_loss", self._cl[prefix], on_epoch=True)
-            self.log("{prefix}/robust_loss", self._rl[prefix], on_epoch=True)
+        if stage == "train":
+            self._cl_train(cl)
+            self._rl_train(rl)
+            self.log("train/classification_loss", self._cl_train, on_epoch=True)
+            self.log("train/robust_loss", self._rl_train, on_epoch=True)
+        elif stage == "val":
+            self._cl_val(cl)
+            self._rl_val(rl)
+            self.log("val/classification_loss", self._cl_val, on_epoch=True)
+            self.log("val/robust_loss", self._rl_val, on_epoch=True)
 
         return {
             "loss": cl + hparams.lbd * rl,

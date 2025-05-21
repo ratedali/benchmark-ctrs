@@ -42,14 +42,10 @@ class ADRE(RandomizedSmoothing):
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs, params=params)
-        self._Lper = {
-            "train": MeanMetric(),
-            "val": MeanMetric(),
-        }
-        self._Ladre = {
-            "train": MeanMetric(),
-            "val": MeanMetric(),
-        }
+        self._Lper_train = MeanMetric()
+        self._Lper_val = MeanMetric()
+        self._Ladre_train = MeanMetric()
+        self._Ladre_val = MeanMetric()
 
     @override
     def training_step(
@@ -58,10 +54,7 @@ class ADRE(RandomizedSmoothing):
         batch_idx: int,
         dataloader_idx: int | None = None,
     ) -> StepOutput:
-        skip_rl = (
-            self.hparams["deferred"] and self.current_epoch < self.hparams["lr_step"]
-        )
-        return self._loss(batch, skip_rl=skip_rl, prefix="train")
+        return self._loss(batch, stage="train")
 
     @override
     def validation_step(
@@ -70,14 +63,13 @@ class ADRE(RandomizedSmoothing):
         batch_idx: int,
         dataloader_idx: int | None = None,
     ) -> StepOutput:
-        return self._loss(batch, prefix="val")
+        return self._loss(batch, stage="val")
 
     def _loss(
         self,
         batch: Batch,
         *,
-        skip_rl: bool = False,
-        prefix: Literal["train", "val"] | None = None,
+        stage: Literal["train", "val"] | None = None,
     ) -> StepOutput:
         hparams = cast("ADREHParams", self.hparams)
         inputs, targets = batch
@@ -125,10 +117,15 @@ class ADRE(RandomizedSmoothing):
                 )
                 R_adre = R_adre / targets.numel()
 
-        if prefix is not None:
-            self._Lper[prefix](R_per)
-            self._Ladre[prefix](R_adre)
-            self.log("{prefix}/classification_loss", self._Lper[prefix], on_epoch=True)
-            self.log("{prefix}/robust_loss", self._Ladre[prefix], on_epoch=True)
+        if stage == "train":
+            self._Lper_train(R_per)
+            self._Ladre_train(R_adre)
+            self.log("train/classification_loss", self._Lper_train, on_epoch=True)
+            self.log("train/robust_loss", self._Ladre_train, on_epoch=True)
+        elif stage == "val":
+            self._Lper_val(R_per)
+            self._Ladre_val(R_adre)
+            self.log("val/classification_loss", self._Lper_val, on_epoch=True)
+            self.log("val/robust_loss", self._Ladre_val, on_epoch=True)
 
         return {"loss": R_per + hparams.lbd * R_adre, "predictions": input_probs}
