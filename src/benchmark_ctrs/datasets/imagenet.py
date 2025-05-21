@@ -64,7 +64,7 @@ class ImageNet(ClassificationDataModule):
     @property
     @override
     def default_arch(self) -> Architectures:
-        return Architectures.Resnet_50
+        return Architectures.Resnet50
 
     @property
     @override

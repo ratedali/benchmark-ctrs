@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 import lightning as L
+from lightning.pytorch.utilities import LightningEnum
 from torch.utils.data import DataLoader, Dataset
 from typing_extensions import override
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from benchmark_ctrs.models import Architectures
 
 
-class Datasets(Enum):
+class Datasets(LightningEnum):
     MNIST = "MNIST"
     CIFAR_10 = "CIFAR-10"
     ImageNet = "ImageNet"

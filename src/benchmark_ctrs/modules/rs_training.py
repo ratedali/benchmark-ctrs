@@ -120,12 +120,12 @@ class RandomizedSmoothing(L.LightningModule, ABC):
     def setup(self, stage: str) -> None:
         if self.__arch == Architectures.LeNet:
             self.__base_model = LeNet()
-        elif self.__arch == Architectures.Resnet_50:
+        elif self.__arch == Architectures.Resnet50:
             if self.__is_imagenet:
                 self.__base_model = resnet50()
             else:
                 self.__base_model = ResNet(depth=50, num_classes=self._num_classes)
-        elif self.__arch == Architectures.Resnet_110:
+        elif self.__arch == Architectures.Resnet110:
             self.__base_model = ResNet(depth=110, num_classes=self._num_classes)
         else:
             raise ValueError(

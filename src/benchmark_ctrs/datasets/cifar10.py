@@ -53,7 +53,7 @@ class CIFAR10(ClassificationDataModule):
     @property
     @override
     def default_arch(self) -> Architectures:
-        return Architectures.Resnet_110
+        return Architectures.Resnet110
 
     @property
     @override

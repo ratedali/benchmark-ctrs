@@ -1,13 +1,13 @@
-from enum import Enum
+from lightning.pytorch.utilities import LightningEnum
 
 from benchmark_ctrs.models.lenet import LeNet
 from benchmark_ctrs.models.resnet import ResNet
 
 
-class Architectures(Enum):
+class Architectures(LightningEnum):
     LeNet = "lenet"
-    Resnet_50 = "resnet50"
-    Resnet_110 = "resnet110"
+    Resnet50 = "resnet50"
+    Resnet110 = "resnet110"
 
 
 __all__ = ["LeNet", "ResNet"]
