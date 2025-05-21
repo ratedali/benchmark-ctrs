@@ -18,18 +18,18 @@ class CIFAR10(ClassificationDataModule):
     __means: Final = [0.4914, 0.4822, 0.4465]
     __sds: Final = [0.2023, 0.1994, 0.2010]
 
-    def __init__(self, batch_size: int = 400, *args: Any, **kwargs: Any):
-        super().__init__(batch_size, *args, **kwargs)
+    def __init__(self, *args: Any, batch_size: int = 400, **kwargs: Any):
+        super().__init__(*args, **kwargs, batch_size=batch_size)
 
     def prepare_data(self) -> None:
-        cifar.CIFAR10(self.params.cache_dir, train=True, download=True)
-        cifar.CIFAR10(self.params.cache_dir, train=False, download=True)
+        cifar.CIFAR10(self._cache_dir, train=True, download=True)
+        cifar.CIFAR10(self._cache_dir, train=False, download=True)
 
     def setup(self, stage: str) -> None:
         if stage == "fit":
             self._train, self._val = random_split(
                 dataset=cifar.CIFAR10(
-                    self.params.cache_dir,
+                    self._cache_dir,
                     train=True,
                     transform=Compose(
                         [
@@ -43,11 +43,11 @@ class CIFAR10(ClassificationDataModule):
             )
         elif stage == "test":
             self._test = cifar.CIFAR10(
-                self.params.cache_dir, train=False, transform=ToTensor()
+                self._cache_dir, train=False, transform=ToTensor()
             )
         elif stage == "predict":
             self._predict = cifar.CIFAR10(
-                self.params.cache_dir, train=False, transform=ToTensor()
+                self._cache_dir, train=False, transform=ToTensor()
             )
 
     @property

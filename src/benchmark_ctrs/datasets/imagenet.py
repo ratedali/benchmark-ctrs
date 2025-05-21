@@ -25,8 +25,8 @@ class ImageNet(ClassificationDataModule):
     __means: Final = [0.485, 0.456, 0.406]
     __sds: Final = [0.229, 0.224, 0.225]
 
-    def __init__(self, batch_size: int = 64, *args: Any, **kwargs: Any):
-        super().__init__(batch_size, *args, **kwargs)
+    def __init__(self, *args: Any, batch_size: int = 64, **kwargs: Any):
+        super().__init__(*args, batch_size=batch_size, **kwargs)
         self.__train_transforms = Compose(
             [
                 RandomResizedCrop(224),
@@ -46,7 +46,7 @@ class ImageNet(ClassificationDataModule):
         if stage == "fit":
             self._train, self._val = random_split(
                 dataset=imagenet.ImageNet(
-                    self.params.cache_dir,
+                    self._cache_dir,
                     split="train",
                     transform=self.__train_transforms,
                 ),
@@ -54,11 +54,11 @@ class ImageNet(ClassificationDataModule):
             )
         elif stage == "test":
             self._test = imagenet.ImageNet(
-                self.params.cache_dir, split="val", transform=self.__test_transforms
+                self._cache_dir, split="val", transform=self.__test_transforms
             )
         elif stage == "predict":
             self._predict = imagenet.ImageNet(
-                self.params.cache_dir, split="val", transform=self.__test_transforms
+                self._cache_dir, split="val", transform=self.__test_transforms
             )
 
     @property

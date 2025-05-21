@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic
+from typing import TYPE_CHECKING, ClassVar
 
 import lightning as L
 from torch.utils.data import DataLoader, Dataset
-from typing_extensions import TypeVar, override
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from lightning.pytorch.utilities.types import EVAL_DATALOADERS, TRAIN_DATALOADERS
@@ -22,34 +21,26 @@ class Datasets(Enum):
     ImageNet = "ImageNet"
 
 
-@dataclass(frozen=True)
-class DataModuleParams:
-    cache_dir: Path = field(default=Path("datasets_cache"))
-    workers: int = 4
+class ClassificationDataModule(L.LightningDataModule, ABC):
+    __default_cache_dir: ClassVar = Path("datasets_cache")
 
-
-_Tparams = TypeVar("_Tparams", bound=DataModuleParams, default=DataModuleParams)
-
-
-class ClassificationDataModule(L.LightningDataModule, ABC, Generic[_Tparams]):
     def __init__(
         self,
+        *,
         batch_size: int,
-        params: _Tparams,
+        workers: int = 4,
+        cache_dir: Path | None = None,
     ):
         super().__init__()
 
         self._batch_size = batch_size
-        self.__params = params
+        self._workers = workers
+        self._cache_dir = cache_dir or ClassificationDataModule.__default_cache_dir
 
         self._train: Dataset | None = None
         self._val: Dataset | None = None
         self._test: Dataset | None = None
         self._predict: Dataset | None = None
-
-    @property
-    def params(self) -> _Tparams:
-        return self.__params
 
     @property
     def default_arch(self) -> Architectures | None:
@@ -78,7 +69,7 @@ class ClassificationDataModule(L.LightningDataModule, ABC, Generic[_Tparams]):
         return DataLoader(
             self._train,
             batch_size=self._batch_size,
-            num_workers=self.__params.workers,
+            num_workers=self._workers,
         )
 
     @override
@@ -88,7 +79,7 @@ class ClassificationDataModule(L.LightningDataModule, ABC, Generic[_Tparams]):
         return DataLoader(
             self._val,
             batch_size=self._batch_size,
-            num_workers=self.__params.workers,
+            num_workers=self._workers,
         )
 
     @override
@@ -98,7 +89,7 @@ class ClassificationDataModule(L.LightningDataModule, ABC, Generic[_Tparams]):
         return DataLoader(
             self._test,
             batch_size=self._batch_size,
-            num_workers=self.__params.workers,
+            num_workers=self._workers,
         )
 
     @override
@@ -108,5 +99,5 @@ class ClassificationDataModule(L.LightningDataModule, ABC, Generic[_Tparams]):
         return DataLoader(
             self._predict,
             batch_size=self._batch_size,
-            num_workers=self.__params.workers,
+            num_workers=self._workers,
         )
