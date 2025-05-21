@@ -61,7 +61,8 @@ class SmoothedClassifier(L.LightningModule):
         params: HParams,
     ):
         """
-        :param base_classifier: maps from [batch x channel x height x width] to [batch x num_classes]
+        :param base_classifier: maps from
+            [batch x channel x height x width] to [batch x num_classes]
 
         """
         super().__init__()

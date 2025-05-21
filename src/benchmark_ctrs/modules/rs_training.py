@@ -17,12 +17,11 @@ from torchmetrics.wrappers import FeatureShare
 from torchvision.models import resnet50
 from typing_extensions import override
 
-from benchmark_ctrs.metrics import CertifiedRadius
+from benchmark_ctrs.metrics import certified_radius
 from benchmark_ctrs.models import (
     Architectures,
     LeNet,
     ResNet,
-    smooth,
 )
 from benchmark_ctrs.models.layers import Normalization
 
@@ -87,18 +86,20 @@ class RandomizedSmoothing(L.LightningModule, ABC):
         sds: list[float],
         means: list[float],
         params: HParams,
-        cert_val: smooth.HParams | None = None,
-        cert_test: smooth.HParams | None = None,
-        cert_pred: smooth.HParams | None = None,
+        cert_val: certified_radius.Params | None = None,
+        cert_test: certified_radius.Params | None = None,
+        cert_pred: certified_radius.Params | None = None,
         is_imagenet: bool = False,
     ) -> None:
         super().__init__()
 
         self._num_classes = num_classes
         self.save_hyperparameters(dataclasses.asdict(params))
-        self._val_cert_params = cert_val or smooth.HParams(n0=10, n=500)
-        self._test_cert_params = cert_test or smooth.HParams()
-        self._pred_cert_params = cert_pred or smooth.HParams()
+        self._val_cert_params = cert_val or certified_radius.Params(
+            n0=10, n=500, max_=10
+        )
+        self._test_cert_params = cert_test or certified_radius.Params()
+        self._pred_cert_params = cert_pred or certified_radius.Params()
 
         self.__is_imagenet = is_imagenet
         self.__arch = arch
@@ -139,21 +140,21 @@ class RandomizedSmoothing(L.LightningModule, ABC):
         )
         self._val_cert = FeatureShare(
             {
-                "acr": CertifiedRadius(
+                "acr": certified_radius.CertifiedRadius(
                     self._base_classifier,
                     self._val_cert_params,
                     num_classes=self._num_classes,
                     sigma=self.hparams["sigma"],
                     reduction="mean",
                 ),
-                "best_cr": CertifiedRadius(
+                "best_cr": certified_radius.CertifiedRadius(
                     self._base_classifier,
                     self._val_cert_params,
                     num_classes=self._num_classes,
                     sigma=self.hparams["sigma"],
                     reduction="max",
                 ),
-                "worst_cr": CertifiedRadius(
+                "worst_cr": certified_radius.CertifiedRadius(
                     self._base_classifier,
                     self._val_cert_params,
                     num_classes=self._num_classes,
