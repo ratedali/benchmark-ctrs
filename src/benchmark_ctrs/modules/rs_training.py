@@ -60,7 +60,7 @@ class HParams:
     sigma: float
     learning_rate: float
     lr_decay: float
-    lr_step: float
+    lr_step: int
     momentum: float
     weight_decay: float
 
