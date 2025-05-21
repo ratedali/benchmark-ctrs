@@ -10,9 +10,6 @@ readme = "README.md"
 requires-python = ">=3.9"
 classifiers = [
     "Development Status :: 1 - Planning",
-    "Environment :: Console",
-    "Environment :: GPU",
-    "Environment :: GPU :: NVIDIA CUDA",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries",
@@ -22,7 +19,6 @@ license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
     "typing-extensions",
-    "importlib-metadata; python_version < '3.10'",
     "torch==2.6.0",
     "torchvision==0.21.0",
     "lightning[pytorch-extra]",
@@ -35,7 +31,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["ruff"]
 results = ["pandas", "tbparse"]
-notebooks = ["ipykernel"]
 
 [project.urls]
 Homepage = "https://github.com/ratedali/benchmark_ctrs"
