@@ -1,24 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import dataclasses
 from typing import TYPE_CHECKING, cast
 
 import torch
 import torch.nn.functional as F
-import torchmetrics
-import torchmetrics.aggregation
 from torch.profiler import record_function
-from typing_extensions import Literal, override
+from torchmetrics.aggregation import MeanMetric
+from typing_extensions import override
 
-from benchmark_ctrs.modules.rs_training import (
-    Batch,
-    HParams,
-    RandomizedSmoothing,
-    StepOutput,
-)
+from benchmark_ctrs.modules.rs_training import HParams, RandomizedSmoothing
 
 if TYPE_CHECKING:
     from torch import Tensor
+    from typing_extensions import Literal
 
     from benchmark_ctrs.modules.rs_training import (
         Batch,
@@ -26,7 +21,7 @@ if TYPE_CHECKING:
     )
 
 
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)
 class ADREHParams(HParams):
     learning_rate: float = 0.1
     lr_decay: float = 0.1
@@ -48,12 +43,12 @@ class ADRE(RandomizedSmoothing):
     ) -> None:
         super().__init__(*args, **kwargs, params=params)
         self._Lper = {
-            "train": torchmetrics.aggregation.MeanMetric(),
-            "val": torchmetrics.aggregation.MeanMetric(),
+            "train": MeanMetric(),
+            "val": MeanMetric(),
         }
         self._Ladre = {
-            "train": torchmetrics.aggregation.MeanMetric(),
-            "val": torchmetrics.aggregation.MeanMetric(),
+            "train": MeanMetric(),
+            "val": MeanMetric(),
         }
 
     @override
@@ -89,11 +84,11 @@ class ADRE(RandomizedSmoothing):
 
         with record_function("sampling"):
             samples = torch.repeat_interleave(inputs, hparams.k, dim=0)  # (B*k)xCxWxH
-            sample_logits: torch.Tensor = self(samples)  # (B*k)xK
+            sample_logits: Tensor = self(samples)  # (B*k)xK
             sample_targets = torch.repeat_interleave(targets, hparams.k)
 
         with record_function("classification_loss"):
-            R_per: torch.Tensor = self._criterion(
+            R_per: Tensor = self._criterion(
                 sample_logits,
                 sample_targets,
             )
