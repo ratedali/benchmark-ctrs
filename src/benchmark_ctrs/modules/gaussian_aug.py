@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class GaussianAugHParams(HParams):
     learning_rate: float = 0.1
     lr_decay: float = 0.1
-    lr_step: float = 60
+    lr_step: int = 60
     momentum: float = 0.9
     weight_decay: float = 1e-4
 

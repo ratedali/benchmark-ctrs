@@ -24,21 +24,22 @@ class Datasets(Enum):
 
 @dataclass(frozen=True)
 class DataModuleParams:
-    batch_size: int
     cache_dir: Path = field(default=Path("datasets_cache"))
     workers: int = 4
 
 
-_Tparams = TypeVar("_Tparams", bound=DataModuleParams)
+_Tparams = TypeVar("_Tparams", bound=DataModuleParams, default=DataModuleParams)
 
 
 class ClassificationDataModule(L.LightningDataModule, ABC, Generic[_Tparams]):
     def __init__(
         self,
+        batch_size: int,
         params: _Tparams,
     ):
         super().__init__()
 
+        self._batch_size = batch_size
         self.__params = params
 
         self._train: Dataset | None = None
@@ -76,7 +77,7 @@ class ClassificationDataModule(L.LightningDataModule, ABC, Generic[_Tparams]):
             raise ValueError("Training split not initialized")
         return DataLoader(
             self._train,
-            batch_size=self.__params.batch_size,
+            batch_size=self._batch_size,
             num_workers=self.__params.workers,
         )
 
@@ -86,7 +87,7 @@ class ClassificationDataModule(L.LightningDataModule, ABC, Generic[_Tparams]):
             raise ValueError("Validation split not initialized")
         return DataLoader(
             self._val,
-            batch_size=self.__params.batch_size,
+            batch_size=self._batch_size,
             num_workers=self.__params.workers,
         )
 
@@ -96,7 +97,7 @@ class ClassificationDataModule(L.LightningDataModule, ABC, Generic[_Tparams]):
             raise ValueError("Testing split not initialized")
         return DataLoader(
             self._test,
-            batch_size=self.__params.batch_size,
+            batch_size=self._batch_size,
             num_workers=self.__params.workers,
         )
 
@@ -106,6 +107,6 @@ class ClassificationDataModule(L.LightningDataModule, ABC, Generic[_Tparams]):
             raise ValueError("Testing split not initialized")
         return DataLoader(
             self._predict,
-            batch_size=self.__params.batch_size,
+            batch_size=self._batch_size,
             num_workers=self.__params.workers,
         )

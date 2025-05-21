@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final
 
 from torch.utils.data import random_split
 from torchvision.datasets import imagenet
@@ -17,26 +16,17 @@ from typing_extensions import override
 
 from benchmark_ctrs.datasets.classification_module import (
     ClassificationDataModule,
-    DataModuleParams,
     Datasets,
 )
 from benchmark_ctrs.models import Architectures
 
 
-@dataclass(frozen=True)
-class ImageNetParams(DataModuleParams):
-    batch_size: int = 64
-
-
-_default_params = ImageNetParams()
-
-
-class ImageNet(ClassificationDataModule[ImageNetParams]):
+class ImageNet(ClassificationDataModule):
     __means: Final = [0.485, 0.456, 0.406]
     __sds: Final = [0.229, 0.224, 0.225]
 
-    def __init__(self, params: ImageNetParams = _default_params):
-        super().__init__(params)
+    def __init__(self, batch_size: int = 64, *args: Any, **kwargs: Any):
+        super().__init__(batch_size, *args, **kwargs)
         self.__train_transforms = Compose(
             [
                 RandomResizedCrop(224),

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final
 
 from torch.utils.data import random_split
 from torchvision.datasets import mnist
@@ -10,26 +9,17 @@ from typing_extensions import override
 
 from benchmark_ctrs.datasets.classification_module import (
     ClassificationDataModule,
-    DataModuleParams,
     Datasets,
 )
 from benchmark_ctrs.models import Architectures
 
 
-@dataclass(frozen=True)
-class MNISTParams(DataModuleParams):
-    batch_size: int = 400
-
-
-_default_params = MNISTParams()
-
-
-class MNIST(ClassificationDataModule[MNISTParams]):
+class MNIST(ClassificationDataModule):
     __means: Final = [0.0]
     __sds: Final = [1.0]
 
-    def __init__(self, params: MNISTParams = _default_params) -> None:
-        super().__init__(params)
+    def __init__(self, batch_size: int = 400, *args: Any, **kwargs: Any) -> None:
+        super().__init__(batch_size, *args, **kwargs)
 
     def prepare_data(self) -> None:
         mnist.MNIST(self.params.cache_dir, train=True, download=True)

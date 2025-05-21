@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Final
+from typing import Any, Final
 
 from torch.utils.data import random_split
 from torchvision.datasets import cifar
@@ -10,26 +9,17 @@ from typing_extensions import override
 
 from benchmark_ctrs.datasets.classification_module import (
     ClassificationDataModule,
-    DataModuleParams,
     Datasets,
 )
 from benchmark_ctrs.models import Architectures
 
 
-@dataclass(frozen=True)
-class CIFAR10Params(DataModuleParams):
-    batch_size: int = 400
-
-
-_default_params = CIFAR10Params()
-
-
-class CIFAR10(ClassificationDataModule[CIFAR10Params]):
+class CIFAR10(ClassificationDataModule):
     __means: Final = [0.4914, 0.4822, 0.4465]
     __sds: Final = [0.2023, 0.1994, 0.2010]
 
-    def __init__(self, params: CIFAR10Params = _default_params):
-        super().__init__(params)
+    def __init__(self, batch_size: int = 400, *args: Any, **kwargs: Any):
+        super().__init__(batch_size, *args, **kwargs)
 
     def prepare_data(self) -> None:
         cifar.CIFAR10(self.params.cache_dir, train=True, download=True)
