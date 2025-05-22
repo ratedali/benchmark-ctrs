@@ -13,16 +13,19 @@ import torch
 from scipy.stats import binomtest, norm
 from statsmodels.stats.proportion import proportion_confint
 from torch import Tensor, nn
-from typing_extensions import Literal, TypeAlias
+from typing_extensions import Literal, TypeAlias, TypeIs
 
 
-class _ABSTAIN_TYPE:
-    ...
+class _ABSTAIN_TYPE: ...
 
 
-ABSTAIN = _ABSTAIN_TYPE()
+_ABSTAIN = _ABSTAIN_TYPE()
 
 Prediction: TypeAlias = Union[int, _ABSTAIN_TYPE]
+
+
+def is_abstain(prediction: Prediction) -> TypeIs[_ABSTAIN_TYPE]:
+    return prediction == _ABSTAIN
 
 
 class Certificate(NamedTuple):
@@ -108,7 +111,7 @@ class SmoothedClassifier(L.LightningModule):
         nA = cast("int", counts_estimation[cAHat].item())
         pABar = self._lower_confidence_bound(nA, self.n, self.alpha)
         if pABar < 0.5:  # noqa: PLR2004
-            return Certificate(ABSTAIN, 0.0)
+            return Certificate(_ABSTAIN, 0.0)
 
         if self.mode == "gaussian":
             radius = self.sigma * cast("float", norm.ppf(pABar).item())
@@ -140,7 +143,7 @@ class SmoothedClassifier(L.LightningModule):
         nA = cast("int", counts_estimation[cAHat].item())
         pABar = self._lower_confidence_bound(nA, self.n, self.alpha)
         if pABar < 0.5:  # noqa: PLR2004
-            return Certificate(ABSTAIN, 0.0)
+            return Certificate(_ABSTAIN, 0.0)
 
         radius = self.sigma * cast("float", norm.ppf(pABar).item())
         if self.ord == "l2":
@@ -169,7 +172,7 @@ class SmoothedClassifier(L.LightningModule):
         count2 = cast("int", counts[top2[1]].item())
 
         if binomtest(count1, count1 + count2, p=0.5).pvalue > self.alpha:
-            return ABSTAIN
+            return _ABSTAIN
 
         return cast("int", top2[0].item())
 
