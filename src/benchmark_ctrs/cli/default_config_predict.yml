@@ -1,0 +1,13 @@
+seed_everything: 42
+trainer:
+  deterministic: warn
+  num_sanity_val_steps: 2
+  enable_checkpointing: true
+  default_root_dir: ./logs
+  callbacks:
+    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+      init_args:
+        save_last: true
+        save_on_train_epoch_end: false
+        monitor: val/loss
+        mode: min

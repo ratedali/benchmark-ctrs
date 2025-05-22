@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
-import numpy as np
 import torch
 from torchmetrics import Metric
 from torchmetrics.utilities import dim_zero_cat
@@ -28,12 +27,12 @@ class CertifiedRadius(Metric):
     higher_is_better = True
     is_differentiable = False
     plot_lower_bound = 0.0
+    feature_network: ClassVar = "_smooth"
 
     _indices: list[Tensor]
+    _predictions: list[Tensor]
     _radii: list[Tensor]
-    _smooth: Module
-
-    feature_network = "_smooth"
+    _smooth: smooth.SmoothedClassifier
 
     def __init__(
         self,
@@ -62,6 +61,7 @@ class CertifiedRadius(Metric):
         )
         self.add_state("_radii", default=[], dist_reduce_fx="cat")
         if self._reduction == "none":
+            self.add_state("_predictions", default=[], dist_reduce_fx="cat")
             self.add_state("_indices", default=[], dist_reduce_fx="cat")
 
     def update(self, inputs: Tensor):
@@ -70,24 +70,34 @@ class CertifiedRadius(Metric):
             end=self._max if self._max is not None else inputs.size(0),
             step=self._skip,
         )
-        if self._reduction == "none":
-            self._indices.append(indices)
-
-        radii = np.fromiter(
-            iter=(
-                self._smooth(x, certify=True).certified_radius for x in inputs[indices]
-            ),
-            dtype=float,
+        certs = [self._smooth.forward(x, certify=True) for x in inputs[indices]]
+        radii = torch.tensor(
+            [cert.certified_radius for cert in certs],
+            dtype=torch.float,
+            device=self.device,
         )
         self._radii.append(torch.as_tensor(radii, device=self.device))
 
-    def compute(self) -> Tensor | tuple[Tensor, Tensor]:
+        if self._reduction == "none":
+            predictions = torch.tensor(
+                [
+                    cert.prediction if isinstance(cert.prediction, int) else -1
+                    for cert in certs
+                ],
+                dtype=torch.int,
+                device=self.device,
+            )
+            self._indices.append(indices)
+            self._predictions.append(predictions)
+
+    def compute(self) -> Tensor | tuple[Tensor, Tensor, Tensor]:
         radii = dim_zero_cat(self._radii)
         if self._reduction == "none":
             indices = dim_zero_cat(self._indices)
-            return indices, radii
+            predictions = dim_zero_cat(self._predictions)
+            return indices, predictions, radii
         if radii.numel() == 0:
-            return torch.tensor(0.0).to(radii)
+            return torch.tensor([0.0]).to(radii)
         if self._reduction == "max":
             return radii.max()
         if self._reduction == "min":

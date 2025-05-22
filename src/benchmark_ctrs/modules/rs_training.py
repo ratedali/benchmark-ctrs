@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         OptimizerConfig,
         OptimizerLRSchedulerConfig,
     )
+    from torch.nn import Module
     from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
     from typing_extensions import TypeAlias, TypeIs
 
@@ -115,6 +116,18 @@ class RandomizedSmoothing(L.LightningModule, ABC):
 
         self._val_metrics = self._train_metrics.clone(prefix="val/")
         self._val_loss = MeanMetric()
+
+    @property
+    def base_classifier(self) -> Module:
+        return self._base_classifier
+
+    @property
+    def num_classes(self) -> int:
+        return self._num_classes
+
+    @property
+    def sigma(self) -> float:
+        return self.hparams["sigma"]
 
     @override
     def setup(self, stage: str) -> None:
@@ -250,8 +263,7 @@ class RandomizedSmoothing(L.LightningModule, ABC):
         batch_idx: int,
         dataloader_idx: int | None = None,
     ):
-        predictions = self._base_classifier(batch)
-        return torch.argmax(predictions, dim=1)
+        return None
 
     @override
     def on_train_epoch_start(self) -> None:

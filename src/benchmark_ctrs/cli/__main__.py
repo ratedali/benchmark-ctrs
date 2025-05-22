@@ -4,6 +4,7 @@ from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
 from typing_extensions import override
 
 from benchmark_ctrs import datasets, modules
+from benchmark_ctrs.callbacks import *  # noqa: F403
 from benchmark_ctrs.datasets import *  # noqa: F403
 from benchmark_ctrs.modules import *  # noqa: F403
 
@@ -19,6 +20,11 @@ def main():
             "fit": {
                 "default_config_files": [
                     Path(__file__).parent / "default_config_fit.yml"
+                ]
+            },
+            "predict": {
+                "default_config_files": [
+                    Path(__file__).parent / "default_config_predict.yml"
                 ]
             },
         },
