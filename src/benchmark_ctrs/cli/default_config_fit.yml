@@ -4,15 +4,15 @@ trainer:
   num_sanity_val_steps: 2
   enable_checkpointing: true
   default_root_dir: ./logs
-  profiler:
-    class_path: lightning.pytorch.profilers.SimpleProfiler
   callbacks:
     - class_path: lightning.pytorch.callbacks.ModelCheckpoint
       init_args:
-        save_last: true
         save_on_train_epoch_end: false
+        save_top_k: 1
         monitor: val/loss
         mode: min
+        every_n_epochs: 1
+        save_last: true
   logger:
     - class_path: lightning.pytorch.loggers.tensorboard.TensorBoardLogger
       init_args:
