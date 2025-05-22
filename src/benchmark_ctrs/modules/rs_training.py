@@ -3,14 +3,14 @@ from __future__ import annotations
 import dataclasses
 import time
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 import lightning as L
 import torch
 from torch import Tensor
 from torch.optim import SGD
 from torch.optim.lr_scheduler import StepLR
-from torchmetrics import Metric, MetricCollection
+from torchmetrics import MetricCollection
 from torchmetrics.aggregation import MeanMetric
 from torchmetrics.classification import Accuracy
 from torchmetrics.wrappers import FeatureShare
@@ -151,31 +151,32 @@ class RandomizedSmoothing(L.LightningModule, ABC):
         self._base_classifier = torch.nn.Sequential(
             self.__norm_layer, self.__base_model
         )
-        self._val_cert = FeatureShare(
-            {
-                "acr": certified_radius.CertifiedRadius(
-                    self._base_classifier,
-                    self._val_cert_params,
-                    num_classes=self._num_classes,
-                    sigma=self.hparams["sigma"],
-                    reduction="mean",
-                ),
-                "best_cr": certified_radius.CertifiedRadius(
-                    self._base_classifier,
-                    self._val_cert_params,
-                    num_classes=self._num_classes,
-                    sigma=self.hparams["sigma"],
-                    reduction="max",
-                ),
-                "worst_cr": certified_radius.CertifiedRadius(
-                    self._base_classifier,
-                    self._val_cert_params,
-                    num_classes=self._num_classes,
-                    sigma=self.hparams["sigma"],
-                    reduction="min",
-                ),
-            }
-        )
+        if stage in {"fit", "validate"}:
+            self._val_cert = FeatureShare(
+                {
+                    "acr": certified_radius.CertifiedRadius(
+                        self._base_classifier,
+                        self._val_cert_params,
+                        num_classes=self._num_classes,
+                        sigma=self.hparams["sigma"],
+                        reduction="mean",
+                    ),
+                    "best_cr": certified_radius.CertifiedRadius(
+                        self._base_classifier,
+                        self._val_cert_params,
+                        num_classes=self._num_classes,
+                        sigma=self.hparams["sigma"],
+                        reduction="max",
+                    ),
+                    "worst_cr": certified_radius.CertifiedRadius(
+                        self._base_classifier,
+                        self._val_cert_params,
+                        num_classes=self._num_classes,
+                        sigma=self.hparams["sigma"],
+                        reduction="min",
+                    ),
+                }
+            )
 
     @override
     def configure_optimizers(self) -> CONFIGURE_OPTIMIZERS:
@@ -193,26 +194,16 @@ class RandomizedSmoothing(L.LightningModule, ABC):
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
     @override
-    def forward(self, inputs: Tensor) -> Tensor:
+    def forward(self, inputs: Tensor, *args: Any, **kwargs: Any) -> Tensor:
         inputs = inputs + torch.randn_like(inputs) * self.hparams["sigma"]
         return self._base_classifier(inputs)
 
     @override
     @abstractmethod
-    def training_step(
-        self,
-        batch: Batch,
-        batch_idx: int,
-        dataloader_idx: int | None = None,
-    ) -> StepOutput: ...
+    def training_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput: ...
 
     @override
-    def validation_step(
-        self,
-        batch: Batch,
-        batch_idx: int,
-        dataloader_idx: int | None = None,
-    ) -> StepOutput:
+    def validation_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput:
         return self._default_eval_step(batch)
 
     def _default_eval_step(self, batch: Batch) -> StepOutput:
@@ -222,47 +213,40 @@ class RandomizedSmoothing(L.LightningModule, ABC):
         return {"loss": loss, "predictions": predictions}
 
     def _log_batch_metrics(
-        self,
-        outputs: STEP_OUTPUT,
-        batch: Batch,
-        *,
-        prefix: str | None,
-        loss_metric: Metric,
-        acc_metrics: MetricCollection,
-    ):
+        self, outputs: STEP_OUTPUT, batch: Batch, *, stage: Literal["train", "validate"]
+    ) -> None:
         if not is_valid_step_output(outputs):
             raise ValueError(
                 "step output must be a dict with the tensors "
                 f"'loss' and 'predictions', got value: {outputs}"
             )
 
-        loss_metric(outputs["loss"])
-        self.log(
-            f"{prefix or ''}loss",
-            loss_metric,
-            prog_bar=True,
-            on_epoch=True,
-        )
-
-        _inputs, targets = batch
-        acc_metrics(outputs["predictions"], targets)
-        self.log_dict(acc_metrics, on_epoch=True)
+        inputs, targets = batch
+        loss, predictions = outputs["loss"], outputs["predictions"]
+        if stage == "train":
+            self._train_loss(loss)
+            self.log("train/loss", self._train_loss, on_epoch=True, on_step=False)
+            self._train_metrics(predictions, targets)
+            self.log_dict(self._train_metrics, on_epoch=True, on_step=False)
+        elif stage == "validate":
+            self._val_loss(loss)
+            self.log(
+                "val/loss",
+                self._train_loss,
+                on_epoch=True,
+                on_step=False,
+                prog_bar=True,
+            )
+            self._val_metrics(predictions, targets)
+            self.log_dict(self._val_metrics, on_epoch=True, on_step=False)
+            self._val_cert(inputs)
+            self.log_dict(self._val_cert, on_epoch=True, on_step=False)
 
     @override
-    def test_step(
-        self,
-        batch: Batch,
-        batch_idx: int,
-        dataloader_idx: int | None = None,
-    ) -> StepOutput:
+    def test_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput:
         return self._default_eval_step(batch)
 
-    def predict_step(
-        self,
-        batch: Batch,
-        batch_idx: int,
-        dataloader_idx: int | None = None,
-    ):
+    def predict_step(self, batch: Batch, *args: Any, **kwargs: Any) -> Any:
         return None
 
     @override
@@ -273,43 +257,27 @@ class RandomizedSmoothing(L.LightningModule, ABC):
     @override
     def on_train_epoch_end(self) -> None:
         super().on_train_epoch_end()
-        self.log("epoch_time", time.perf_counter() - self._epoch_start)
+        self.log(
+            "time/epoch",
+            time.perf_counter() - self._epoch_start,
+            on_epoch=True,
+            on_step=False,
+        )
 
     @override
-    def on_train_batch_start(self, batch: Any, batch_idx: int) -> int | None:
+    def on_train_batch_start(self, batch: Any, *args: Any, **kwargs: Any) -> int | None:
         self._batch_start = time.perf_counter()
-        return super().on_train_batch_start(batch, batch_idx)
 
     @override
     def on_train_batch_end(
-        self, outputs: STEP_OUTPUT, batch: Batch, batch_idx: int
+        self, outputs: STEP_OUTPUT, batch: Batch, *args: Any, **kwargs: Any
     ) -> None:
-        super().on_train_batch_end(outputs, batch, batch_idx)
-        self._log_batch_metrics(
-            outputs,
-            batch,
-            loss_metric=self._train_loss,
-            acc_metrics=self._train_metrics,
-            prefix=self._train_metrics.prefix,
-        )
+        self._log_batch_metrics(outputs, batch, stage="train")
         self._batch_time(time.perf_counter() - self._batch_start)
-        self.log("batch_time", self._batch_time, on_epoch=True)
+        self.log("time/batch", self._batch_time, on_epoch=False, on_step=True)
 
     @override
     def on_validation_batch_end(
-        self,
-        outputs: STEP_OUTPUT,
-        batch: Batch,
-        batch_idx: int,
-        dataloader_idx: int = 0,
+        self, outputs: STEP_OUTPUT, batch: Batch, *args: Any, **kwargs: Any
     ) -> None:
-        super().on_validation_batch_end(outputs, batch, batch_idx, dataloader_idx)
-        self._log_batch_metrics(
-            outputs,
-            batch,
-            loss_metric=self._val_loss,
-            acc_metrics=self._val_metrics,
-            prefix=self._val_metrics.prefix,
-        )
-        self._val_cert(batch[0])
-        self.log_dict(self._val_cert, on_epoch=True)
+        self._log_batch_metrics(outputs, batch, stage="validate")
