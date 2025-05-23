@@ -3,20 +3,22 @@ from pathlib import Path
 from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
 from typing_extensions import override
 
-from benchmark_ctrs import datasets, modules
+from benchmark_ctrs import __version__, datasets, modules
 from benchmark_ctrs.callbacks import *  # noqa: F403
 from benchmark_ctrs.datasets import *  # noqa: F403
 from benchmark_ctrs.modules import *  # noqa: F403
 
 
-def main():
+def main() -> None:
     BenchmarkCTRSCLI(
         model_class=modules.RandomizedSmoothing,
         subclass_mode_model=True,
         datamodule_class=datasets.ClassificationDataModule,
         subclass_mode_data=True,
         parser_kwargs={
+            "version": __version__,
             "default_env": True,
+            "dump_header": [f"# benchmark-ctrs=={__version__}"],
             "fit": {
                 "default_config_files": [
                     Path(__file__).parent / "default_config_fit.yml"
