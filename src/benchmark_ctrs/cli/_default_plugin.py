@@ -37,12 +37,6 @@ def register_data_modules() -> Sequence[type[BaseDataModule]]:
 
 @plugins.hookimpl
 def register_models() -> Sequence[type[BaseRandomizedSmoothing]]:
-    from benchmark_ctrs.modules.adre import ADRE
     from benchmark_ctrs.modules.gaussian_aug import GaussianAug
-    from benchmark_ctrs.modules.macer import MACER
 
-    return (
-        ADRE,
-        GaussianAug,
-        MACER,
-    )
+    return (GaussianAug,)
