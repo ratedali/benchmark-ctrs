@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING
 
 from typing_extensions import override
 
-from benchmark_ctrs.modules.rs_training import HParams, RandomizedSmoothing
+from benchmark_ctrs.modules.module import BaseRandomizedSmoothing, HParams
 
 if TYPE_CHECKING:
-    from benchmark_ctrs.modules.rs_training import (
+    from benchmark_ctrs.modules.module import (
         Batch,
         StepOutput,
     )
@@ -23,7 +23,7 @@ class GaussianAugHParams(HParams):
     weight_decay: float = 1e-4
 
 
-class GaussianAug(RandomizedSmoothing):
+class GaussianAug(BaseRandomizedSmoothing):
     def __init__(self, *args, params: GaussianAugHParams, **kwargs) -> None:
         super().__init__(*args, params=params, **kwargs)
 

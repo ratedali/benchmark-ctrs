@@ -18,12 +18,10 @@ from torchvision.models import resnet50
 from typing_extensions import override
 
 from benchmark_ctrs.metrics import certified_radius
-from benchmark_ctrs.models import (
-    Architectures,
-    LeNet,
-    ResNet,
-)
+from benchmark_ctrs.models import Architectures
 from benchmark_ctrs.models.layers import Normalization
+from benchmark_ctrs.models.lenet import LeNet
+from benchmark_ctrs.models.resnet import ResNet
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -78,7 +76,7 @@ def is_valid_step_output(value: Any) -> TypeIs[StepOutput]:
     )
 
 
-class RandomizedSmoothing(L.LightningModule, ABC):
+class BaseRandomizedSmoothing(L.LightningModule, ABC):
     def __init__(
         self,
         *,

@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 import lightning as L
-from lightning.pytorch.utilities import LightningEnum
 from torch.utils.data import DataLoader, Dataset
 from typing_extensions import override
 
@@ -15,13 +14,7 @@ if TYPE_CHECKING:
     from benchmark_ctrs.models import Architectures
 
 
-class Datasets(LightningEnum):
-    MNIST = "MNIST"
-    CIFAR_10 = "CIFAR-10"
-    ImageNet = "ImageNet"
-
-
-class ClassificationDataModule(L.LightningDataModule, ABC):
+class BaseDataModule(L.LightningDataModule, ABC):
     __default_cache_dir: ClassVar = Path("datasets_cache")
 
     def __init__(
@@ -32,7 +25,7 @@ class ClassificationDataModule(L.LightningDataModule, ABC):
         cache_dir: Path | None = None,
     ):
         super().__init__()
-        self._cache_dir = cache_dir or ClassificationDataModule.__default_cache_dir
+        self._cache_dir = cache_dir or BaseDataModule.__default_cache_dir
         self.save_hyperparameters(ignore="cache_dir")
 
         self._train: Dataset | None = None
@@ -43,10 +36,6 @@ class ClassificationDataModule(L.LightningDataModule, ABC):
     @property
     def default_arch(self) -> Architectures | None:
         return None
-
-    @property
-    @abstractmethod
-    def dataset(self) -> Datasets: ...
 
     @property
     @abstractmethod

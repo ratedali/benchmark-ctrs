@@ -1,24 +1,32 @@
+from __future__ import annotations
+
 from pathlib import Path
 
 from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
 from typing_extensions import override
 
-from benchmark_ctrs import __version__, datasets, modules
-from benchmark_ctrs.callbacks import *  # noqa: F403
-from benchmark_ctrs.datasets import *  # noqa: F403
-from benchmark_ctrs.modules import *  # noqa: F403
+import benchmark_ctrs
+from benchmark_ctrs.cli import plugins
+from benchmark_ctrs.datasets.imagenet import ImageNet
+from benchmark_ctrs.datasets.module import BaseDataModule
+from benchmark_ctrs.modules.module import BaseRandomizedSmoothing
 
 
 def main() -> None:
+    hook = plugins.get_hook()
+    hook.register_data_modules()
+    hook.register_models()
+    hook.register_callbacks()
+
     BenchmarkCTRSCLI(
-        model_class=modules.RandomizedSmoothing,
+        model_class=BaseRandomizedSmoothing,
         subclass_mode_model=True,
-        datamodule_class=datasets.ClassificationDataModule,
+        datamodule_class=BaseDataModule,
         subclass_mode_data=True,
         parser_kwargs={
-            "version": __version__,
+            "version": benchmark_ctrs.__version__,
             "default_env": True,
-            "dump_header": [f"# benchmark-ctrs=={__version__}"],
+            "dump_header": [f"# benchmark-ctrs=={benchmark_ctrs.__version__}"],
             "fit": {
                 "default_config_files": [
                     Path(__file__).parent / "default_config_fit.yml"
@@ -50,9 +58,9 @@ class BenchmarkCTRSCLI(LightningCLI):
             apply_on="instantiate",
         )
         parser.link_arguments(
-            "data.dataset",
+            "data",
             "model.init_args.is_imagenet",
-            compute_fn=lambda dataset: dataset == datasets.ImageNet,
+            compute_fn=lambda dataset: isinstance(dataset, ImageNet),
             apply_on="instantiate",
         )
 

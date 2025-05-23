@@ -7,14 +7,11 @@ from torchvision.datasets import cifar
 from torchvision.transforms import Compose, RandomCrop, RandomHorizontalFlip, ToTensor
 from typing_extensions import override
 
-from benchmark_ctrs.datasets.classification_module import (
-    ClassificationDataModule,
-    Datasets,
-)
+from benchmark_ctrs.datasets.module import BaseDataModule
 from benchmark_ctrs.models import Architectures
 
 
-class CIFAR10(ClassificationDataModule):
+class CIFAR10(BaseDataModule):
     __means: Final = [0.4914, 0.4822, 0.4465]
     __sds: Final = [0.2023, 0.1994, 0.2010]
 
@@ -54,11 +51,6 @@ class CIFAR10(ClassificationDataModule):
     @override
     def default_arch(self) -> Architectures:
         return Architectures.Resnet110
-
-    @property
-    @override
-    def dataset(self) -> Datasets:
-        return Datasets.CIFAR_10
 
     @property
     @override

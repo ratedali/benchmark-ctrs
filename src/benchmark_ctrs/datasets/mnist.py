@@ -7,14 +7,11 @@ from torchvision.datasets import mnist
 from torchvision.transforms import ToTensor
 from typing_extensions import override
 
-from benchmark_ctrs.datasets.classification_module import (
-    ClassificationDataModule,
-    Datasets,
-)
+from benchmark_ctrs.datasets.module import BaseDataModule
 from benchmark_ctrs.models import Architectures
 
 
-class MNIST(ClassificationDataModule):
+class MNIST(BaseDataModule):
     __means: Final = [0.0]
     __sds: Final = [1.0]
 
@@ -42,11 +39,6 @@ class MNIST(ClassificationDataModule):
     @override
     def default_arch(self) -> Architectures:
         return Architectures.LeNet
-
-    @property
-    @override
-    def dataset(self) -> Datasets:
-        return Datasets.MNIST
 
     @property
     @override

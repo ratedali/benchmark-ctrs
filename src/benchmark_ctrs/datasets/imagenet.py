@@ -14,14 +14,11 @@ from torchvision.transforms import (
 )
 from typing_extensions import override
 
-from benchmark_ctrs.datasets.classification_module import (
-    ClassificationDataModule,
-    Datasets,
-)
+from benchmark_ctrs.datasets.module import BaseDataModule
 from benchmark_ctrs.models import Architectures
 
 
-class ImageNet(ClassificationDataModule):
+class ImageNet(BaseDataModule):
     __means: Final = [0.485, 0.456, 0.406]
     __sds: Final = [0.229, 0.224, 0.225]
 
@@ -65,11 +62,6 @@ class ImageNet(ClassificationDataModule):
     @override
     def default_arch(self) -> Architectures:
         return Architectures.Resnet50
-
-    @property
-    @override
-    def dataset(self) -> Datasets:
-        return Datasets.CIFAR_10
 
     @property
     @override

@@ -25,7 +25,8 @@ dependencies = [
     "torchmetrics",  
     "numpy",
     "scipy",
-    "statsmodels",                              # required for logging with torch.util.tensorboard
+    "statsmodels",      
+    "pluggy",                        # required for logging with torch.util.tensorboard
 ]
 
 [project.optional-dependencies]

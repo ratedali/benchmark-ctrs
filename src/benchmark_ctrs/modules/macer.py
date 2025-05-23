@@ -10,13 +10,13 @@ from torch.profiler import record_function
 from torchmetrics.aggregation import MeanMetric
 from typing_extensions import override
 
-from benchmark_ctrs.modules.rs_training import HParams, RandomizedSmoothing
+from benchmark_ctrs.modules.module import BaseRandomizedSmoothing, HParams
 
 if TYPE_CHECKING:
     from torch import Tensor
     from typing_extensions import Literal
 
-    from benchmark_ctrs.modules.rs_training import (
+    from benchmark_ctrs.modules.module import (
         Batch,
         StepOutput,
     )
@@ -37,7 +37,7 @@ class MACERHParams(HParams):
     gamma: float = 8
 
 
-class MACER(RandomizedSmoothing):
+class MACER(BaseRandomizedSmoothing):
     def __init__(
         self,
         *args,
