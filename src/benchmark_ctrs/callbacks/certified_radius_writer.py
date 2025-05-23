@@ -10,7 +10,7 @@ from lightning.pytorch.trainer import Trainer
 from typing_extensions import override
 
 from benchmark_ctrs.metrics import certified_radius
-from benchmark_ctrs.modules.rs_training import RandomizedSmoothing
+from benchmark_ctrs.modules.module import BaseRandomizedSmoothing
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -19,14 +19,14 @@ if TYPE_CHECKING:
     from torch import Tensor
     from typing_extensions import TypeIs
 
-    from benchmark_ctrs.modules.rs_training import Batch
+    from benchmark_ctrs.modules.module import Batch
 
 
 FIELDS = ("idx", "label", "predict", "radius", "correct")
 
 
-def _validate_module(module: Any) -> TypeIs[RandomizedSmoothing]:
-    return isinstance(module, RandomizedSmoothing)
+def _validate_module(module: Any) -> TypeIs[BaseRandomizedSmoothing]:
+    return isinstance(module, BaseRandomizedSmoothing)
 
 
 class CertifiedRadiusWriter(BasePredictionWriter):
@@ -53,7 +53,7 @@ class CertifiedRadiusWriter(BasePredictionWriter):
         if not _validate_module(pl_module):
             raise TypeError(
                 "Only modules that are subclasses of "
-                f"{RandomizedSmoothing.__qualname__} are supported"
+                f"{BaseRandomizedSmoothing.__qualname__} are supported"
             )
         path = self._resolve_output_path(trainer)
         with path.open("at") as f:
@@ -74,7 +74,7 @@ class CertifiedRadiusWriter(BasePredictionWriter):
         if not _validate_module(pl_module):
             raise TypeError(
                 "Only modules that are subclasses of "
-                f"{RandomizedSmoothing.__qualname__} are supported"
+                f"{BaseRandomizedSmoothing.__qualname__} are supported"
             )
         if batch_indices is None:
             raise ValueError("Batch indices is required")
@@ -85,7 +85,7 @@ class CertifiedRadiusWriter(BasePredictionWriter):
     def _certify(
         self,
         path: Path,
-        pl_module: RandomizedSmoothing,
+        pl_module: BaseRandomizedSmoothing,
         batch: Batch,
         batch_indices: list[int],
     ) -> None:
