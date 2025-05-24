@@ -230,7 +230,7 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
             self._val_loss(loss)
             self.log(
                 "val/loss",
-                self._train_loss,
+                self._val_loss,
                 on_epoch=True,
                 on_step=False,
                 prog_bar=True,
