@@ -4,10 +4,10 @@
 from __future__ import annotations
 
 import math
+from typing import Literal
 
 import lightning as L
 from torch import Tensor, nn
-from typing_extensions import Literal
 
 
 def _conv3x3(in_planes, out_planes, stride=1):

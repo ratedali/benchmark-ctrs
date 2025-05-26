@@ -11,7 +11,7 @@ from typing_extensions import override
 if TYPE_CHECKING:
     from lightning.pytorch.utilities.types import EVAL_DATALOADERS, TRAIN_DATALOADERS
 
-    from benchmark_ctrs.models import Architectures
+    from benchmark_ctrs.models import Architecture
 
 
 class BaseDataModule(L.LightningDataModule, ABC):
@@ -34,7 +34,7 @@ class BaseDataModule(L.LightningDataModule, ABC):
         self._predict: Dataset | None = None
 
     @property
-    def default_arch(self) -> Architectures | None:
+    def default_arch(self) -> Architecture | None:
         return None
 
     @property

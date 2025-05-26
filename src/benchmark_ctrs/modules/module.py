@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import time
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Literal, TypedDict
+from typing import TYPE_CHECKING, TypedDict
 
 import lightning as L
 import torch
@@ -18,7 +18,7 @@ from torchvision.models import resnet50
 from typing_extensions import override
 
 from benchmark_ctrs.metrics import certified_radius
-from benchmark_ctrs.models import Architectures
+from benchmark_ctrs.models import Architecture, ArchitectureValues
 from benchmark_ctrs.models.layers import Normalization
 from benchmark_ctrs.models.lenet import LeNet
 from benchmark_ctrs.models.resnet import ResNet
@@ -50,7 +50,13 @@ if TYPE_CHECKING:
         Sequence[OptimizerLRSchedulerConfig],
         None,
     ]
-    Batch: TypeAlias = tuple[Tensor, ...]
+
+Batch: TypeAlias = tuple[Tensor, ...]
+
+
+class StepOutput(TypedDict):
+    loss: Tensor
+    predictions: Tensor
 
 
 @dataclasses.dataclass(frozen=True)
@@ -63,57 +69,40 @@ class HParams:
     weight_decay: float
 
 
-class StepOutput(TypedDict):
-    loss: Tensor
-    predictions: Tensor
-
-
-def is_valid_step_output(value: Any) -> TypeIs[StepOutput]:
-    return (
-        isinstance(value, dict)
-        and isinstance(value.get("loss"), Tensor)
-        and isinstance(value.get("predictions"), Tensor)
-    )
-
-
 class BaseRandomizedSmoothing(L.LightningModule, ABC):
     def __init__(
         self,
         *,
-        arch: Architectures,
+        arch: ArchitectureValues,
         num_classes: int,
         sds: list[float],
         means: list[float],
         params: HParams,
         cert_val: certified_radius.Params | None = None,
-        cert_test: certified_radius.Params | None = None,
-        cert_pred: certified_radius.Params | None = None,
         is_imagenet: bool = False,
     ) -> None:
         super().__init__()
+        self.save_hyperparameters(dataclasses.asdict(params))
 
         self._num_classes = num_classes
-        self.save_hyperparameters(dataclasses.asdict(params))
-        self._val_cert_params = cert_val or certified_radius.Params(
-            n0=10, n=500, max_=10
-        )
-        self._test_cert_params = cert_test or certified_radius.Params()
-        self._pred_cert_params = cert_pred or certified_radius.Params()
+        self._val_cert_params = cert_val
 
         self.__is_imagenet = is_imagenet
-        self.__arch = arch
+        self.__arch = Architecture.from_str(arch, source="value")
         self.__means = means
         self.__sds = sds
 
-        self._train_metrics = MetricCollection(
-            {"accuracy": Accuracy(task="multiclass", num_classes=self._num_classes)},
+        self._acc_train = MetricCollection(
+            {
+                "accuracy": Accuracy(task="multiclass", num_classes=self._num_classes),
+            },
             prefix="train/",
         )
-        self._train_loss = MeanMetric()
+        self._loss_train = MeanMetric()
         self._batch_time = MeanMetric()
 
-        self._val_metrics = self._train_metrics.clone(prefix="val/")
-        self._val_loss = MeanMetric()
+        self._acc_val = self._acc_train.clone(prefix="val/")
+        self._loss_val = MeanMetric()
 
     @property
     def base_classifier(self) -> Module:
@@ -129,19 +118,19 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
 
     @override
     def setup(self, stage: str) -> None:
-        if self.__arch == Architectures.LeNet:
+        if self.__arch == Architecture.LeNet:
             self.__base_model = LeNet()
-        elif self.__arch == Architectures.Resnet50:
+        elif self.__arch == Architecture.Resnet50:
             if self.__is_imagenet:
                 self.__base_model = resnet50()
             else:
                 self.__base_model = ResNet(depth=50, num_classes=self._num_classes)
-        elif self.__arch == Architectures.Resnet110:
+        elif self.__arch == Architecture.Resnet110:
             self.__base_model = ResNet(depth=110, num_classes=self._num_classes)
         else:
             raise ValueError(
                 f"Unknown value for arch: {self.__arch}. "
-                f"Possible values are: {', '.join(Architectures._member_names_)}"
+                f"Possible values are: {', '.join(Architecture._member_names_)}"
             )
 
         self._criterion = torch.nn.CrossEntropyLoss()
@@ -149,7 +138,9 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
         self._base_classifier = torch.nn.Sequential(
             self.__norm_layer, self.__base_model
         )
-        if stage in {"fit", "validate"}:
+
+        self._val_cert = None
+        if stage in {"fit", "validate"} and self._val_cert_params is not None:
             self._val_cert = FeatureShare(
                 {
                     "acr": certified_radius.CertifiedRadius(
@@ -210,36 +201,6 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
         loss = self._criterion(predictions, targets)
         return {"loss": loss, "predictions": predictions}
 
-    def _log_batch_metrics(
-        self, outputs: STEP_OUTPUT, batch: Batch, *, stage: Literal["train", "validate"]
-    ) -> None:
-        if not is_valid_step_output(outputs):
-            raise ValueError(
-                "step output must be a dict with the tensors "
-                f"'loss' and 'predictions', got value: {outputs}"
-            )
-
-        inputs, targets = batch
-        loss, predictions = outputs["loss"], outputs["predictions"]
-        if stage == "train":
-            self._train_loss(loss)
-            self.log("train/loss", self._train_loss, on_epoch=True, on_step=False)
-            self._train_metrics(predictions, targets)
-            self.log_dict(self._train_metrics, on_epoch=True, on_step=False)
-        elif stage == "validate":
-            self._val_loss(loss)
-            self.log(
-                "val/loss",
-                self._val_loss,
-                on_epoch=True,
-                on_step=False,
-                prog_bar=True,
-            )
-            self._val_metrics(predictions, targets)
-            self.log_dict(self._val_metrics, on_epoch=True, on_step=False)
-            self._val_cert(inputs)
-            self.log_dict(self._val_cert, on_epoch=True, on_step=False)
-
     @override
     def test_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput:
         return self._default_eval_step(batch)
@@ -270,12 +231,53 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
     def on_train_batch_end(
         self, outputs: STEP_OUTPUT, batch: Batch, *args: Any, **kwargs: Any
     ) -> None:
-        self._log_batch_metrics(outputs, batch, stage="train")
+        if not BaseRandomizedSmoothing.__is_valid_step_output(outputs):
+            raise ValueError(
+                "step output must be a dict with the tensors "
+                f"'loss' and 'predictions', got value: {outputs}"
+            )
+
         self._batch_time(time.perf_counter() - self._batch_start)
         self.log("time/batch", self._batch_time, on_epoch=False, on_step=True)
+
+        self._loss_train(outputs["loss"].detach())
+        self.log("train/loss", self._loss_train, on_epoch=True, on_step=False)
+
+        _inputs, targets = batch
+        self._acc_train(outputs["predictions"].detach(), targets)
+        self.log_dict(self._acc_train, on_epoch=True, on_step=False)
 
     @override
     def on_validation_batch_end(
         self, outputs: STEP_OUTPUT, batch: Batch, *args: Any, **kwargs: Any
     ) -> None:
-        self._log_batch_metrics(outputs, batch, stage="validate")
+        if not BaseRandomizedSmoothing.__is_valid_step_output(outputs):
+            raise ValueError(
+                "step output must be a dict with the tensors "
+                f"'loss' and 'predictions', got value: {outputs}"
+            )
+
+        self._loss_val(outputs["loss"])
+        self.log(
+            "val/loss",
+            self._loss_val,
+            on_epoch=True,
+            on_step=False,
+            prog_bar=True,
+        )
+
+        inputs, targets = batch
+        self._acc_val(outputs["predictions"], targets)
+        self.log_dict(self._acc_val, on_epoch=True, on_step=False)
+
+        if self._val_cert is not None:
+            self._val_cert(inputs)
+            self.log_dict(self._val_cert, on_epoch=True, on_step=False)
+
+    @staticmethod
+    def __is_valid_step_output(value: Any) -> TypeIs[StepOutput]:
+        return (
+            isinstance(value, dict)
+            and isinstance(value.get("loss"), Tensor)
+            and isinstance(value.get("predictions"), Tensor)
+        )

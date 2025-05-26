@@ -4,7 +4,7 @@
 
 import dataclasses
 from math import ceil
-from typing import NamedTuple, Union, cast, overload
+from typing import Literal, NamedTuple, Union, cast, overload
 
 import lightning as L
 import numpy as np
@@ -13,7 +13,7 @@ import torch
 from scipy.stats import binomtest, norm
 from statsmodels.stats.proportion import proportion_confint
 from torch import Tensor, nn
-from typing_extensions import Literal, TypeAlias, TypeIs
+from typing_extensions import TypeAlias, TypeIs
 
 
 class _ABSTAIN_TYPE: ...

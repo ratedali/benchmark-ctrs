@@ -8,7 +8,7 @@ from torchvision.transforms import Compose, RandomCrop, RandomHorizontalFlip, To
 from typing_extensions import override
 
 from benchmark_ctrs.datasets.module import BaseDataModule
-from benchmark_ctrs.models import Architectures
+from benchmark_ctrs.models import Architecture
 
 
 class CIFAR10(BaseDataModule):
@@ -49,8 +49,8 @@ class CIFAR10(BaseDataModule):
 
     @property
     @override
-    def default_arch(self) -> Architectures:
-        return Architectures.Resnet110
+    def default_arch(self) -> Architecture:
+        return Architecture.Resnet110
 
     @property
     @override

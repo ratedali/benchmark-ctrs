@@ -15,7 +15,7 @@ from torchvision.transforms import (
 from typing_extensions import override
 
 from benchmark_ctrs.datasets.module import BaseDataModule
-from benchmark_ctrs.models import Architectures
+from benchmark_ctrs.models import Architecture
 
 
 class ImageNet(BaseDataModule):
@@ -60,8 +60,8 @@ class ImageNet(BaseDataModule):
 
     @property
     @override
-    def default_arch(self) -> Architectures:
-        return Architectures.Resnet50
+    def default_arch(self) -> Architecture:
+        return Architecture.Resnet50
 
     @property
     @override

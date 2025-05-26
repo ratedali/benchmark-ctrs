@@ -8,7 +8,7 @@ from torchvision.transforms import ToTensor
 from typing_extensions import override
 
 from benchmark_ctrs.datasets.module import BaseDataModule
-from benchmark_ctrs.models import Architectures
+from benchmark_ctrs.models import Architecture
 
 
 class MNIST(BaseDataModule):
@@ -37,8 +37,8 @@ class MNIST(BaseDataModule):
 
     @property
     @override
-    def default_arch(self) -> Architectures:
-        return Architectures.LeNet
+    def default_arch(self) -> Architecture:
+        return Architecture.LeNet
 
     @property
     @override
