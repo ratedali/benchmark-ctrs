@@ -223,14 +223,18 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
             )
 
         self._batch_time(time.perf_counter() - self._batch_start)
-        self.log("time/sec", self._batch_time, on_epoch=True, on_step=True)
+        self.log("time/sec", self._batch_time, on_epoch=True)
 
         self._loss_train(outputs["loss"].detach())
-        self.log("train/loss", self._loss_train, on_epoch=True, on_step=False)
+        self.log("train/loss", self._loss_train, on_epoch=True)
 
         _inputs, targets = batch
-        self._acc_train(outputs["predictions"].detach(), targets)
-        self.log_dict(self._acc_train, on_epoch=True, on_step=False)
+        self._acc_train.update(outputs["predictions"].detach(), targets)
+
+    @override
+    def on_train_epoch_end(self) -> None:
+        super().on_train_epoch_end()
+        self.log_dict(self._acc_train)
 
     @override
     def on_validation_batch_end(
@@ -242,22 +246,21 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
                 f"'loss' and 'predictions', got value: {outputs}"
             )
 
-        self._loss_val(outputs["loss"])
-        self.log(
-            "val/loss",
-            self._loss_val,
-            on_epoch=True,
-            on_step=False,
-            prog_bar=True,
-        )
+        self._loss_val.update(outputs["loss"])
 
         inputs, targets = batch
-        self._acc_val(outputs["predictions"], targets)
-        self.log_dict(self._acc_val, on_epoch=True, on_step=False)
+        self._acc_val.update(outputs["predictions"], targets)
 
         if self._val_cert is not None:
-            self._val_cert(inputs)
-            self.log_dict(self._val_cert, on_epoch=True, on_step=False)
+            self._val_cert.update(inputs)
+
+    @override
+    def on_validation_epoch_end(self) -> None:
+        super().on_validation_epoch_end()
+        self.log("val/loss", self._loss_val, prog_bar=True)
+        self.log_dict(self._acc_val)
+        if self._val_cert is not None:
+            self.log_dict(self._val_cert)
 
     @staticmethod
     def __is_valid_step_output(value: Any) -> TypeIs[StepOutput]:
