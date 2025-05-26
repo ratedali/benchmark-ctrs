@@ -209,21 +209,6 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
         return None
 
     @override
-    def on_train_epoch_start(self) -> None:
-        super().on_train_epoch_start()
-        self._epoch_start = time.perf_counter()
-
-    @override
-    def on_train_epoch_end(self) -> None:
-        super().on_train_epoch_end()
-        self.log(
-            "time/epoch",
-            time.perf_counter() - self._epoch_start,
-            on_epoch=True,
-            on_step=False,
-        )
-
-    @override
     def on_train_batch_start(self, batch: Any, *args: Any, **kwargs: Any) -> int | None:
         self._batch_start = time.perf_counter()
 
@@ -238,7 +223,7 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
             )
 
         self._batch_time(time.perf_counter() - self._batch_start)
-        self.log("time/batch", self._batch_time, on_epoch=False, on_step=True)
+        self.log("time/sec", self._batch_time, on_epoch=True, on_step=True)
 
         self._loss_train(outputs["loss"].detach())
         self.log("train/loss", self._loss_train, on_epoch=True, on_step=False)
