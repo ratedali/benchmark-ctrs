@@ -83,6 +83,7 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
     ) -> None:
         super().__init__()
         self.save_hyperparameters(dataclasses.asdict(params))
+        self.strict_loading = False
 
         self._num_classes = num_classes
         self.__val_cert_params = cert_val
