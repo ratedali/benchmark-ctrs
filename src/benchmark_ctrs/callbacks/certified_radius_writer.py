@@ -47,7 +47,7 @@ class CertifiedRadiusWriter(BasePredictionWriter):
                 f"{BaseRandomizedSmoothing.__qualname__} are supported"
             )
         path = self._resolve_output_path(trainer)
-        with path.open("ta") as f:
+        with path.open("tw") as f:
             writer = DictWriter(f, fieldnames=FIELDS)
             writer.writeheader()
 
