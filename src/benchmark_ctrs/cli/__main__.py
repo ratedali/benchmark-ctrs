@@ -23,6 +23,10 @@ def main() -> None:
         subclass_mode_model=True,
         datamodule_class=BaseDataModule,
         subclass_mode_data=True,
+        save_config_kwargs={
+            "overwrite": True,
+            "multifile": True,
+        },
         parser_kwargs={
             "version": benchmark_ctrs.__version__,
             "default_env": True,

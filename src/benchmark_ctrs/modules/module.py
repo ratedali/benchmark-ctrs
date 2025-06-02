@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 import time
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, TypedDict, cast
 
 import lightning as L
 import torch
@@ -17,7 +17,7 @@ from torchmetrics.wrappers import FeatureShare
 from torchvision.models import resnet50
 from typing_extensions import override
 
-from benchmark_ctrs.metrics import certified_radius
+from benchmark_ctrs.metrics import certified_radius as cr
 from benchmark_ctrs.models import Architecture, ArchitectureValues
 from benchmark_ctrs.models.layers import Normalization
 from benchmark_ctrs.models.lenet import LeNet
@@ -33,7 +33,6 @@ if TYPE_CHECKING:
         OptimizerConfig,
         OptimizerLRSchedulerConfig,
     )
-    from torch.nn import Module
     from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
     from typing_extensions import TypeAlias, TypeIs
 
@@ -78,14 +77,16 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
         sds: list[float],
         means: list[float],
         params: HParams,
-        cert_val: certified_radius.Params | None = None,
+        cert_val: cr.Params | None = None,
+        cert_predict: cr.Params | None = None,
         is_imagenet: bool = False,
     ) -> None:
         super().__init__()
         self.save_hyperparameters(dataclasses.asdict(params))
 
         self._num_classes = num_classes
-        self._val_cert_params = cert_val
+        self.__val_cert_params = cert_val
+        self.__predict_cert_params = cert_predict
 
         self.__is_imagenet = is_imagenet
         self.__arch = Architecture.from_str(arch, source="value")
@@ -103,18 +104,6 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
 
         self._acc_val = self._acc_train.clone(prefix="val/")
         self._loss_val = MeanMetric()
-
-    @property
-    def base_classifier(self) -> Module:
-        return self._base_classifier
-
-    @property
-    def num_classes(self) -> int:
-        return self._num_classes
-
-    @property
-    def sigma(self) -> float:
-        return self.hparams["sigma"]
 
     @override
     def setup(self, stage: str) -> None:
@@ -140,31 +129,39 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
         )
 
         self._val_cert = None
-        if stage in {"fit", "validate"} and self._val_cert_params is not None:
+        if stage in {"fit", "validate"} and self.__val_cert_params is not None:
             self._val_cert = FeatureShare(
                 {
-                    "acr": certified_radius.CertifiedRadius(
+                    "acr": cr.CertifiedRadius(
                         self._base_classifier,
-                        self._val_cert_params,
+                        self.__val_cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
                         reduction="mean",
                     ),
-                    "best_cr": certified_radius.CertifiedRadius(
+                    "best_cr": cr.CertifiedRadius(
                         self._base_classifier,
-                        self._val_cert_params,
+                        self.__val_cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
                         reduction="max",
                     ),
-                    "worst_cr": certified_radius.CertifiedRadius(
+                    "worst_cr": cr.CertifiedRadius(
                         self._base_classifier,
-                        self._val_cert_params,
+                        self.__val_cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
                         reduction="min",
                     ),
                 }
+            )
+        if stage == "predict" and self.__predict_cert_params:
+            self._predict_cert = cr.CertifiedRadius(
+                self._base_classifier,
+                self.__predict_cert_params,
+                num_classes=self._num_classes,
+                sigma=self.hparams["sigma"],
+                reduction="none",
             )
 
     @override
@@ -186,27 +183,6 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
     def forward(self, inputs: Tensor, *args: Any, **kwargs: Any) -> Tensor:
         inputs = inputs + torch.randn_like(inputs) * self.hparams["sigma"]
         return self._base_classifier(inputs)
-
-    @override
-    @abstractmethod
-    def training_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput: ...
-
-    @override
-    def validation_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput:
-        return self._default_eval_step(batch)
-
-    def _default_eval_step(self, batch: Batch) -> StepOutput:
-        inputs, targets = batch
-        predictions = self.forward(inputs)
-        loss = self._criterion(predictions, targets)
-        return {"loss": loss, "predictions": predictions}
-
-    @override
-    def test_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput:
-        return self._default_eval_step(batch)
-
-    def predict_step(self, batch: Batch, *args: Any, **kwargs: Any) -> Any:
-        return None
 
     @override
     def on_train_batch_start(self, batch: Any, *args: Any, **kwargs: Any) -> int | None:
@@ -235,6 +211,10 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
     def on_train_epoch_end(self) -> None:
         super().on_train_epoch_end()
         self.log_dict(self._acc_train)
+
+    @override
+    @abstractmethod
+    def training_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput: ...
 
     @override
     def on_validation_batch_end(
@@ -269,3 +249,27 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
             and isinstance(value.get("loss"), Tensor)
             and isinstance(value.get("predictions"), Tensor)
         )
+
+    @override
+    def validation_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput:
+        return self._default_eval_step(batch)
+
+    @override
+    def test_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput:
+        return self._default_eval_step(batch)
+
+    @override
+    def predict_step(
+        self, batch: Batch, *args: Any, **kwargs: Any
+    ) -> cr.CertificationResult:
+        inputs, targets = batch
+        self._predict_cert.update(inputs)
+        result = cast("cr.CertificationResult", self._predict_cert.compute())
+        self._predict_cert.reset()
+        return result
+
+    def _default_eval_step(self, batch: Batch) -> StepOutput:
+        inputs, targets = batch
+        predictions = self.forward(inputs)
+        loss = self._criterion(predictions, targets)
+        return {"loss": loss, "predictions": predictions}

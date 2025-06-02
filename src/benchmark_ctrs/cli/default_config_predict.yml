@@ -5,11 +5,11 @@ trainer:
   enable_checkpointing: true
   default_root_dir: ./logs
   callbacks:
-    - class_path: lightning.pytorch.callbacks.ModelCheckpoint
-      init_args:
-        save_on_train_epoch_end: false
-        save_top_k: 1
-        monitor: val/loss
-        mode: min
-        every_n_epochs: 1
-        save_last: true
+  - class_path: lightning.pytorch.callbacks.ModelCheckpoint
+    init_args:
+      save_on_train_epoch_end: false
+      save_top_k: 1
+      monitor: val/loss
+      mode: min
+      every_n_epochs: 1
+      save_last: true
