@@ -57,6 +57,7 @@ class BaseDataModule(L.LightningDataModule, ABC):
             self._train,
             batch_size=self.hparams["batch_size"],
             num_workers=self.hparams["workers"],
+            shuffle=True,
         )
 
     @override
