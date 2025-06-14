@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from typing_extensions import override
 
@@ -31,7 +31,7 @@ class GaussianAug(BaseRandomizedSmoothing):
     def training_step(
         self,
         batch: Batch,
-        batch_idx: int,
-        dataloader_idx: int | None = None,
+        *args: Any,
+        **kwargs: Any,
     ) -> StepOutput:
         return self._default_eval_step(batch)

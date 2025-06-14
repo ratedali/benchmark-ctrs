@@ -21,7 +21,7 @@ from benchmark_ctrs.metrics import certified_radius as cr
 from benchmark_ctrs.models import Architecture, ArchitectureValues
 from benchmark_ctrs.models.layers import Normalization
 from benchmark_ctrs.models.lenet import LeNet
-from benchmark_ctrs.models.resnet import ResNet
+from benchmark_ctrs.models.resnet import CIFARResNet
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -114,9 +114,9 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
             if self.__is_imagenet:
                 self.__base_model = resnet50()
             else:
-                self.__base_model = ResNet(depth=50, num_classes=self._num_classes)
+                self.__base_model = CIFARResNet(depth=50, num_classes=self._num_classes)
         elif self.__arch == Architecture.Resnet110:
-            self.__base_model = ResNet(depth=110, num_classes=self._num_classes)
+            self.__base_model = CIFARResNet(depth=110, num_classes=self._num_classes)
         else:
             raise ValueError(
                 f"Unknown value for arch: {self.__arch}. "

@@ -103,7 +103,7 @@ class _Bottleneck(nn.Module):
         return self.relu(out)
 
 
-class ResNet(L.LightningModule):
+class CIFARResNet(L.LightningModule):
     def __init__(
         self,
         depth: int,
