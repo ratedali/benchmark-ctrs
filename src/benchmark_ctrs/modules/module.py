@@ -233,7 +233,7 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
         self._acc_val.update(outputs["predictions"], targets)
 
         if self._val_cert is not None:
-            self._val_cert.update(inputs)
+            self._val_cert.update(inputs, targets)
 
     @override
     def on_validation_epoch_end(self) -> None:
@@ -264,7 +264,7 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
         self, batch: Batch, *args: Any, **kwargs: Any
     ) -> cr.CertificationResult:
         inputs, targets = batch
-        self._predict_cert.update(inputs)
+        self._predict_cert.update(inputs, targets)
         result = cast("cr.CertificationResult", self._predict_cert.compute())
         self._predict_cert.reset()
         return result
