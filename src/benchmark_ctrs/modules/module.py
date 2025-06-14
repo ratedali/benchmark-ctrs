@@ -133,21 +133,21 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
         if stage in {"fit", "validate"} and self.__val_cert_params is not None:
             self._val_cert = FeatureShare(
                 {
-                    "acr": cr.CertifiedRadius(
+                    "certified_radius/average": cr.CertifiedRadius(
                         self._base_classifier,
                         self.__val_cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
                         reduction="mean",
                     ),
-                    "best_cr": cr.CertifiedRadius(
+                    "certified_radius/best": cr.CertifiedRadius(
                         self._base_classifier,
                         self.__val_cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
                         reduction="max",
                     ),
-                    "worst_cr": cr.CertifiedRadius(
+                    "certified_radius/worst": cr.CertifiedRadius(
                         self._base_classifier,
                         self.__val_cert_params,
                         num_classes=self._num_classes,
