@@ -34,7 +34,7 @@ if TYPE_CHECKING:
         OptimizerLRSchedulerConfig,
     )
     from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
-    from typing_extensions import TypeAlias, TypeIs
+    from typing_extensions import NotRequired, TypeAlias, TypeIs
 
     CONFIGURE_OPTIMIZERS: TypeAlias = Union[
         torch.optim.Optimizer,
@@ -54,7 +54,7 @@ Batch: TypeAlias = tuple[Tensor, ...]
 
 
 class StepOutput(TypedDict):
-    loss: Tensor
+    loss: NotRequired[Tensor]
     predictions: Tensor
 
 
@@ -182,11 +182,11 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
 
     @override
     def forward(self, inputs: Tensor, *args: Any, **kwargs: Any) -> Tensor:
-        inputs = inputs + torch.randn_like(inputs) * self.hparams["sigma"]
-        return self._base_classifier(inputs)
+        noises = torch.randn_like(inputs) * self.hparams["sigma"]
+        return self._base_classifier(inputs + noises)
 
     @override
-    def on_train_batch_start(self, batch: Any, *args: Any, **kwargs: Any) -> int | None:
+    def on_train_batch_start(self, *args: Any, **kwargs: Any) -> int | None:
         self._batch_start = time.perf_counter()
 
     @override
@@ -202,7 +202,8 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
         self._batch_time(time.perf_counter() - self._batch_start)
         self.log("time/sec", self._batch_time, on_epoch=True)
 
-        self._loss_train(outputs["loss"].detach())
+        if "loss" in outputs:
+            self._loss_train(outputs["loss"].detach())
         self.log("train/loss", self._loss_train, on_epoch=True)
 
         _inputs, targets = batch
@@ -226,8 +227,8 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
                 "step output must be a dict with the tensors "
                 f"'loss' and 'predictions', got value: {outputs}"
             )
-
-        self._loss_val.update(outputs["loss"])
+        if "loss" in outputs:
+            self._loss_val.update(outputs["loss"])
 
         inputs, targets = batch
         self._acc_val.update(outputs["predictions"], targets)
@@ -247,8 +248,8 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
     def __is_valid_step_output(value: Any) -> TypeIs[StepOutput]:
         return (
             isinstance(value, dict)
-            and isinstance(value.get("loss"), Tensor)
-            and isinstance(value.get("predictions"), Tensor)
+            and ("loss" not in value or isinstance(value["loss"], Tensor))
+            and isinstance(value["predictions"], Tensor)
         )
 
     @override
