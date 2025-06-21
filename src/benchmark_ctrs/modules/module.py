@@ -3,10 +3,11 @@ from __future__ import annotations
 import dataclasses
 import time
 from abc import ABC, abstractmethod
+from itertools import chain
 from typing import TYPE_CHECKING, TypedDict, cast
 
-import lightning as L
 import torch
+from lightning import LightningModule
 from torch import Tensor
 from torch.optim import SGD
 from torch.optim.lr_scheduler import StepLR
@@ -55,7 +56,7 @@ Batch: TypeAlias = tuple[Tensor, ...]
 
 class StepOutput(TypedDict):
     loss: NotRequired[Tensor]
-    predictions: Tensor
+    predictions: NotRequired[Tensor]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -68,7 +69,7 @@ class HParams:
     weight_decay: float
 
 
-class BaseRandomizedSmoothing(L.LightningModule, ABC):
+class BaseRandomizedSmoothing(LightningModule, ABC):
     def __init__(
         self,
         *,
@@ -181,9 +182,28 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
         return {"optimizer": optimizer, "lr_scheduler": scheduler}
 
     @override
-    def forward(self, inputs: Tensor, *args: Any, **kwargs: Any) -> Tensor:
-        noises = torch.randn_like(inputs) * self.hparams["sigma"]
-        return self._base_classifier(inputs + noises)
+    def forward(
+        self, inputs: Tensor, *args: Any, noise: bool = True, **kwargs: Any
+    ) -> Tensor:
+        if noise:
+            noises = torch.randn_like(inputs) * self.hparams["sigma"]
+            return self._base_classifier(inputs + noises)
+        return self._base_classifier(inputs)
+
+    @override
+    def on_train_start(self) -> None:
+        super().on_train_start()
+        if self.logger:
+            metrics = dict.fromkeys(
+                chain(
+                    ["time/sec", "train/loss", "val/loss"],
+                    self._acc_train.keys(),
+                    self._acc_val.keys(),
+                    self._val_cert.keys() if self._val_cert else (),
+                ),
+                0.0,
+            )
+            self.logger.log_hyperparams(dict(self.hparams), metrics)
 
     @override
     def on_train_batch_start(self, *args: Any, **kwargs: Any) -> int | None:
@@ -206,8 +226,9 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
             self._loss_train(outputs["loss"].detach())
         self.log("train/loss", self._loss_train, on_epoch=True)
 
-        _inputs, targets = batch
-        self._acc_train.update(outputs["predictions"].detach(), targets)
+        if "predictions" in outputs:
+            _inputs, targets = batch
+            self._acc_train.update(outputs["predictions"].detach(), targets)
 
     @override
     def on_train_epoch_end(self) -> None:
@@ -231,7 +252,8 @@ class BaseRandomizedSmoothing(L.LightningModule, ABC):
             self._loss_val.update(outputs["loss"])
 
         inputs, targets = batch
-        self._acc_val.update(outputs["predictions"], targets)
+        if "predictions" in outputs:
+            self._acc_val.update(outputs["predictions"], targets)
 
         if self._val_cert is not None:
             self._val_cert.update(inputs, targets)
