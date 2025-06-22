@@ -198,8 +198,6 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
                 chain(
                     ["time/sec", "train/loss", "val/loss"],
                     self._acc_train.keys(),
-                    self._acc_val.keys(),
-                    self._val_cert.keys() if self._val_cert else (),
                 ),
                 0.0,
             )
@@ -224,7 +222,8 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
 
         if "loss" in outputs:
             self._loss_train(outputs["loss"].detach())
-        self.log("train/loss", self._loss_train, on_epoch=True)
+        if self._loss_train.update_called:
+            self.log("train/loss", self._loss_train, on_epoch=True)
 
         if "predictions" in outputs:
             _inputs, targets = batch
@@ -233,11 +232,25 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
     @override
     def on_train_epoch_end(self) -> None:
         super().on_train_epoch_end()
-        self.log_dict(self._acc_train)
+        if any(m.update_called for m in self._acc_train.values()):
+            self.log_dict(self._acc_train)
 
     @override
     @abstractmethod
     def training_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput: ...
+
+    @override
+    def on_validation_start(self) -> None:
+        super().on_validation_start()
+        if self.logger:
+            metrics = dict.fromkeys(
+                chain(
+                    self._acc_val.keys(),
+                    self._val_cert.keys() if self._val_cert else (),
+                ),
+                0.0,
+            )
+            self.logger.log_hyperparams(dict(self.hparams), metrics)
 
     @override
     def on_validation_batch_end(
@@ -261,9 +274,13 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
     @override
     def on_validation_epoch_end(self) -> None:
         super().on_validation_epoch_end()
-        self.log("val/loss", self._loss_val, prog_bar=True)
-        self.log_dict(self._acc_val)
-        if self._val_cert is not None:
+        if self._loss_val.update_called:
+            self.log("val/loss", self._loss_val, prog_bar=True)
+        if any(m.update_called for m in self._acc_val.values()):
+            self.log_dict(self._acc_val)
+        if self._val_cert is not None and any(
+            m.update_called for m in self._val_cert.values()
+        ):
             self.log_dict(self._val_cert)
 
     @staticmethod
