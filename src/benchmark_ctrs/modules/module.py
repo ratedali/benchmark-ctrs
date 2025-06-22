@@ -288,7 +288,7 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
         return (
             isinstance(value, dict)
             and ("loss" not in value or isinstance(value["loss"], Tensor))
-            and isinstance(value["predictions"], Tensor)
+            and ("prediction" not in value or isinstance(value["predictions"], Tensor))
         )
 
     @override
