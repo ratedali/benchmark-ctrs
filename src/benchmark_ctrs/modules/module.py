@@ -194,11 +194,13 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
     def on_train_start(self) -> None:
         super().on_train_start()
         if self.logger:
+            keys = [
+                f"{key}_{suffix}"
+                for key in ("time/sec", "train/loss")
+                for suffix in ("epoch", "step")
+            ]
             metrics = dict.fromkeys(
-                chain(
-                    ["time/sec", "train/loss", "val/loss"],
-                    self._acc_train.keys(),
-                ),
+                chain(keys, self._acc_train.keys()),
                 0.0,
             )
             self.logger.log_hyperparams(dict(self.hparams), metrics)
@@ -242,7 +244,7 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
     @override
     def on_validation_start(self) -> None:
         super().on_validation_start()
-        if self.logger:
+        if self.logger and not self.trainer.sanity_checking:
             metrics = dict.fromkeys(
                 chain(
                     self._acc_val.keys(),
