@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from lightning.pytorch.cli import LightningArgumentParser, LightningCLI
+from lightning.pytorch.cli import ArgsType, LightningArgumentParser, LightningCLI
 from typing_extensions import override
 
 import benchmark_ctrs
@@ -12,7 +12,7 @@ from benchmark_ctrs.datasets.module import BaseDataModule
 from benchmark_ctrs.modules.module import BaseRandomizedSmoothing
 
 
-def main() -> None:
+def main(args: ArgsType = None) -> None:
     hook = plugins.get_hook()
     hook.register_data_modules()
     hook.register_models()
@@ -42,6 +42,7 @@ def main() -> None:
                 ]
             },
         },
+        args=args,
     )
 
 
