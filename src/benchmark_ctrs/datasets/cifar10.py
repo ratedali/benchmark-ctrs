@@ -17,6 +17,7 @@ class CIFAR10(BaseDataModule):
 
     def __init__(self, *args: Any, batch_size: int = 400, **kwargs: Any):
         super().__init__(*args, **kwargs, batch_size=batch_size)
+        self.name = "cifar10"
 
     def prepare_data(self) -> None:
         cifar.CIFAR10(self._cache_dir, train=True, download=True)

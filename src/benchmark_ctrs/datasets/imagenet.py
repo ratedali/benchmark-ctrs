@@ -24,6 +24,7 @@ class ImageNet(BaseDataModule):
 
     def __init__(self, *args: Any, batch_size: int = 64, **kwargs: Any):
         super().__init__(*args, batch_size=batch_size, **kwargs)
+        self.name = "imagenet"
         self.__train_transforms = Compose(
             [
                 RandomResizedCrop(224),

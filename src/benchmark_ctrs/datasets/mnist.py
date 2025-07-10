@@ -17,6 +17,7 @@ class MNIST(BaseDataModule):
 
     def __init__(self, *args: Any, batch_size: int = 400, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs, batch_size=batch_size)
+        self.name = "mnist"
 
     def prepare_data(self) -> None:
         mnist.MNIST(self._cache_dir, train=True, download=True)

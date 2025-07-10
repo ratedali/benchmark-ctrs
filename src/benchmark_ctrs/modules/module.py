@@ -200,7 +200,12 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
                 for suffix in ("epoch", "step")
             ]
             metrics = dict.fromkeys(
-                chain(keys, self._acc_train.keys()),
+                chain(
+                    keys,
+                    self._acc_train.keys(),
+                    self._acc_val.keys(),
+                    self._val_cert.keys() if self._val_cert else (),
+                ),
                 0.0,
             )
             self.logger.log_hyperparams(dict(self.hparams), metrics)
@@ -240,19 +245,6 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
     @override
     @abstractmethod
     def training_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput: ...
-
-    @override
-    def on_validation_start(self) -> None:
-        super().on_validation_start()
-        if self.logger and not self.trainer.sanity_checking:
-            metrics = dict.fromkeys(
-                chain(
-                    self._acc_val.keys(),
-                    self._val_cert.keys() if self._val_cert else (),
-                ),
-                0.0,
-            )
-            self.logger.log_hyperparams(dict(self.hparams), metrics)
 
     @override
     def on_validation_batch_end(

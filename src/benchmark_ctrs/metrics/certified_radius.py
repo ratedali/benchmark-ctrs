@@ -142,7 +142,7 @@ class CertifiedRadius(Metric):
                 self._total += radii.numel()
             elif self._reduction == "max" and correct.any().item():
                 self._radii = torch.max(_radii, radii[correct].max())
-            elif self._reduction == "min" and radii.numel() > 0:
+            elif self._reduction == "min" and correct.any().item():
                 self._radii = torch.min(_radii, radii[correct].min())
 
     @torch.inference_mode()
