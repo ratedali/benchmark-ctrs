@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from lightning.pytorch.cli import ArgsType, LightningArgumentParser, LightningCLI
@@ -11,12 +12,25 @@ from benchmark_ctrs.datasets.imagenet import ImageNet
 from benchmark_ctrs.datasets.module import BaseDataModule
 from benchmark_ctrs.modules.module import BaseModule
 
+logger = logging.getLogger(__name__)
+
 
 def main(args: ArgsType = None) -> None:
     hook = plugins.get_hook()
-    hook.register_data_modules()
-    hook.register_models()
-    hook.register_callbacks()
+    try:
+        hook.register_callbacks()
+    except Exception:
+        logger.exception("Error raised when registering plugin callbacks.")
+
+    try:
+        hook.register_data_modules()
+    except Exception:
+        logger.exception("Error raised when registering plugin data modules.")
+
+    try:
+        hook.register_models()
+    except Exception:
+        logger.exception("Error raised when registering plugin training modules.")
 
     BenchmarkCTRSCLI(
         model_class=BaseModule,

@@ -10,7 +10,6 @@ from lightning.pytorch.trainer import Trainer
 from typing_extensions import override
 
 from benchmark_ctrs.modules.module import BaseModule
-from benchmark_ctrs.utilities import check_valid_submodule
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -37,7 +36,7 @@ class CertifiedRadiusWriter(BasePredictionWriter):
     def on_predict_epoch_start(
         self, trainer: Trainer, pl_module: LightningModule
     ) -> None:
-        if not check_valid_submodule(pl_module):
+        if not isinstance(pl_module, BaseModule):
             raise TypeError(
                 "Only modules that are subclasses of "
                 f"{BaseModule.__qualname__} are supported"
@@ -58,7 +57,7 @@ class CertifiedRadiusWriter(BasePredictionWriter):
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        if not check_valid_submodule(pl_module):
+        if not isinstance(pl_module, BaseModule):
             raise TypeError(
                 "Only modules that are subclasses of "
                 f"{BaseModule.__qualname__} are supported"
