@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import math
 import time
 from abc import ABC, abstractmethod
 from itertools import chain
@@ -131,7 +132,11 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
         )
 
         self._val_cert = None
-        if stage in {"fit", "validate"} and self.__val_cert_params is not None:
+        if (
+            stage in {"fit", "validate"}
+            and self.__val_cert_params is not None
+            and self.hparams["sigma"] > 0
+        ):
             self._val_cert = FeatureShare(
                 {
                     "certified_radius/average": cr.CertifiedRadius(
@@ -157,7 +162,11 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
                     ),
                 }
             )
-        if stage == "predict" and self.__predict_cert_params:
+        if (
+            stage == "predict"
+            and self.__predict_cert_params
+            and self.hparams["sigma"] > 0
+        ):
             self._predict_cert = cr.CertifiedRadius(
                 self._base_classifier,
                 self.__predict_cert_params,
