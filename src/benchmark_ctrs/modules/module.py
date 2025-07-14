@@ -67,6 +67,7 @@ class BaseModule(LightningModule, ABC):
         self.__means = means
         self.__sds = sds
 
+        self.automatic_accuracy: bool = True
         self._acc_train = MetricCollection(
             {
                 "accuracy": Accuracy(task="multiclass", num_classes=self._num_classes),
@@ -206,16 +207,14 @@ class BaseModule(LightningModule, ABC):
         self.log("time/sec", self._batch_time, on_epoch=True)
 
         with torch.no_grad():
-            inputs, targets = batch
-
             if loss := outputs.get("loss"):
                 self._loss_train(loss)
-            if self._loss_train.update_called:
-                self.log("train/loss", self._loss_train, on_epoch=True)
 
-            predictions = outputs.get("predictions")
-            if predictions and predictions.size(0) == targets.size(0):
-                self._acc_train.update(predictions, targets)
+            if self.automatic_accuracy and (predictions := outputs.get("predictions")):
+                self._acc_train.update(predictions, batch[1])
+
+        if self._loss_train.update_called:
+            self.log("train/loss", self._loss_train, on_epoch=True)
 
     @override
     def on_train_epoch_end(self) -> None:
@@ -242,8 +241,7 @@ class BaseModule(LightningModule, ABC):
         if loss := outputs.get("loss"):
             self._loss_val.update(loss)
 
-        predictions = outputs.get("predictions")
-        if predictions and predictions.size(0) == targets.size(0):
+        if self.automatic_accuracy and (predictions := outputs.get("predictions")):
             self._acc_val.update(predictions, targets)
 
         if self._val_cert is not None:
