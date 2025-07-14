@@ -9,7 +9,7 @@ import benchmark_ctrs
 from benchmark_ctrs.cli import plugins
 from benchmark_ctrs.datasets.imagenet import ImageNet
 from benchmark_ctrs.datasets.module import BaseDataModule
-from benchmark_ctrs.modules.module import BaseRandomizedSmoothing
+from benchmark_ctrs.modules.module import BaseModule
 
 
 def main(args: ArgsType = None) -> None:
@@ -19,7 +19,7 @@ def main(args: ArgsType = None) -> None:
     hook.register_callbacks()
 
     BenchmarkCTRSCLI(
-        model_class=BaseRandomizedSmoothing,
+        model_class=BaseModule,
         subclass_mode_model=True,
         datamodule_class=BaseDataModule,
         subclass_mode_data=True,

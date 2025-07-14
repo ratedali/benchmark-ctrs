@@ -5,18 +5,10 @@ from typing import TYPE_CHECKING, Any
 
 from typing_extensions import override
 
-from benchmark_ctrs.modules.module import (
-    BaseRandomizedSmoothing,
-)
-from benchmark_ctrs.modules.module import (
-    HParams as BaseHParams,
-)
+from benchmark_ctrs.modules import BaseHParams, BaseModule
 
 if TYPE_CHECKING:
-    from benchmark_ctrs.modules.module import (
-        Batch,
-        StepOutput,
-    )
+    from benchmark_ctrs.types import Batch, StepOutput
 
 
 @dataclass(frozen=True)
@@ -28,7 +20,7 @@ class HParams(BaseHParams):
     weight_decay: float = 1e-4
 
 
-class GaussianAug(BaseRandomizedSmoothing):
+class GaussianAug(BaseModule):
     def __init__(self, *args, params: HParams, **kwargs) -> None:
         super().__init__(*args, params=params, **kwargs)
 

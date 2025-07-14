@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import dataclasses
-import math
 import time
 from abc import ABC, abstractmethod
 from itertools import chain
-from typing import TYPE_CHECKING, TypedDict, cast
+from typing import TYPE_CHECKING, cast
 
 import torch
 from lightning import LightningModule
@@ -24,40 +23,14 @@ from benchmark_ctrs.models import Architecture, ArchitectureValues
 from benchmark_ctrs.models.layers import Normalization
 from benchmark_ctrs.models.lenet import LeNet
 from benchmark_ctrs.models.resnet import CIFARResNet
+from benchmark_ctrs.utilities import check_valid_step_output
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-    from typing import Any, Union
+    from typing import Any
 
-    from lightning.pytorch.utilities.types import (
-        STEP_OUTPUT,
-        LRSchedulerConfig,
-        OptimizerConfig,
-        OptimizerLRSchedulerConfig,
-    )
-    from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
-    from typing_extensions import NotRequired, TypeAlias, TypeIs
+    from lightning.pytorch.utilities.types import STEP_OUTPUT
 
-    CONFIGURE_OPTIMIZERS: TypeAlias = Union[
-        torch.optim.Optimizer,
-        Sequence[torch.optim.Optimizer],
-        tuple[
-            Sequence[torch.optim.Optimizer],
-            Sequence[Union[LRScheduler, ReduceLROnPlateau, LRSchedulerConfig]],
-        ],
-        OptimizerConfig,
-        OptimizerLRSchedulerConfig,
-        Sequence[OptimizerConfig],
-        Sequence[OptimizerLRSchedulerConfig],
-        None,
-    ]
-
-Batch: TypeAlias = tuple[Tensor, ...]
-
-
-class StepOutput(TypedDict):
-    loss: NotRequired[Tensor]
-    predictions: NotRequired[Tensor]
+    from benchmark_ctrs.types import CONFIGURE_OPTIMIZERS, Batch, StepOutput
 
 
 @dataclasses.dataclass(frozen=True)
@@ -70,7 +43,7 @@ class HParams:
     weight_decay: float
 
 
-class BaseRandomizedSmoothing(LightningModule, ABC):
+class BaseModule(LightningModule, ABC):
     def __init__(
         self,
         *,
@@ -79,8 +52,7 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
         sds: list[float],
         means: list[float],
         params: HParams,
-        cert_val: cr.Params | None = None,
-        cert_predict: cr.Params | None = None,
+        cert: cr.Params | None = None,
         is_imagenet: bool = False,
     ) -> None:
         super().__init__()
@@ -88,8 +60,7 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
         self.strict_loading = False
 
         self._num_classes = num_classes
-        self.__val_cert_params = cert_val
-        self.__predict_cert_params = cert_predict
+        self._cert_params = cert
 
         self.__is_imagenet = is_imagenet
         self.__arch = Architecture.from_str(arch, source="value")
@@ -134,42 +105,40 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
         self._val_cert = None
         if (
             stage in {"fit", "validate"}
-            and self.__val_cert_params is not None
+            and self._cert_params is not None
             and self.hparams["sigma"] > 0
         ):
             self._val_cert = FeatureShare(
                 {
                     "certified_radius/average": cr.CertifiedRadius(
                         self._base_classifier,
-                        self.__val_cert_params,
+                        self._cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
                         reduction="mean",
                     ),
                     "certified_radius/best": cr.CertifiedRadius(
                         self._base_classifier,
-                        self.__val_cert_params,
+                        self._cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
                         reduction="max",
                     ),
                     "certified_radius/worst": cr.CertifiedRadius(
                         self._base_classifier,
-                        self.__val_cert_params,
+                        self._cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
                         reduction="min",
                     ),
                 }
             )
-        if (
-            stage == "predict"
-            and self.__predict_cert_params
-            and self.hparams["sigma"] > 0
-        ):
+
+        self._predict_cert = None
+        if stage == "predict" and self._cert_params and self.hparams["sigma"] > 0:
             self._predict_cert = cr.CertifiedRadius(
                 self._base_classifier,
-                self.__predict_cert_params,
+                self._cert_params,
                 num_classes=self._num_classes,
                 sigma=self.hparams["sigma"],
                 reduction="none",
@@ -192,9 +161,9 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
 
     @override
     def forward(
-        self, inputs: Tensor, *args: Any, noise: bool = True, **kwargs: Any
+        self, inputs: Tensor, *args: Any, add_noise: bool = True, **kwargs: Any
     ) -> Tensor:
-        if noise:
+        if add_noise:
             noises = torch.randn_like(inputs) * self.hparams["sigma"]
             return self._base_classifier(inputs + noises)
         return self._base_classifier(inputs)
@@ -227,23 +196,26 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
     def on_train_batch_end(
         self, outputs: STEP_OUTPUT, batch: Batch, *args: Any, **kwargs: Any
     ) -> None:
-        if not BaseRandomizedSmoothing.__is_valid_step_output(outputs):
+        if not check_valid_step_output(outputs):
             raise ValueError(
-                "step output must be a dict with the tensors "
+                "return value from `training_step` must be a dict with the tensors "
                 f"'loss' and 'predictions', got value: {outputs}"
             )
 
         self._batch_time(time.perf_counter() - self._batch_start)
         self.log("time/sec", self._batch_time, on_epoch=True)
 
-        if "loss" in outputs:
-            self._loss_train(outputs["loss"].detach())
-        if self._loss_train.update_called:
-            self.log("train/loss", self._loss_train, on_epoch=True)
+        with torch.no_grad():
+            inputs, targets = batch
 
-        if "predictions" in outputs:
-            _inputs, targets = batch
-            self._acc_train.update(outputs["predictions"].detach(), targets)
+            if loss := outputs.get("loss"):
+                self._loss_train(loss)
+            if self._loss_train.update_called:
+                self.log("train/loss", self._loss_train, on_epoch=True)
+
+            predictions = outputs.get("predictions")
+            if predictions and predictions.size(0) == targets.size(0):
+                self._acc_train.update(predictions, targets)
 
     @override
     def on_train_epoch_end(self) -> None:
@@ -259,17 +231,20 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
     def on_validation_batch_end(
         self, outputs: STEP_OUTPUT, batch: Batch, *args: Any, **kwargs: Any
     ) -> None:
-        if not BaseRandomizedSmoothing.__is_valid_step_output(outputs):
+        if not check_valid_step_output(outputs):
             raise ValueError(
-                "step output must be a dict with the tensors "
+                "return value from `validation_step` must be a dict with the tensors "
                 f"'loss' and 'predictions', got value: {outputs}"
             )
-        if "loss" in outputs:
-            self._loss_val.update(outputs["loss"])
 
         inputs, targets = batch
-        if "predictions" in outputs:
-            self._acc_val.update(outputs["predictions"], targets)
+
+        if loss := outputs.get("loss"):
+            self._loss_val.update(loss)
+
+        predictions = outputs.get("predictions")
+        if predictions and predictions.size(0) == targets.size(0):
+            self._acc_val.update(predictions, targets)
 
         if self._val_cert is not None:
             self._val_cert.update(inputs, targets)
@@ -286,14 +261,6 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
         ):
             self.log_dict(self._val_cert)
 
-    @staticmethod
-    def __is_valid_step_output(value: Any) -> TypeIs[StepOutput]:
-        return (
-            isinstance(value, dict)
-            and ("loss" not in value or isinstance(value["loss"], Tensor))
-            and ("prediction" not in value or isinstance(value["predictions"], Tensor))
-        )
-
     @override
     def validation_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput:
         return self._default_eval_step(batch)
@@ -305,15 +272,17 @@ class BaseRandomizedSmoothing(LightningModule, ABC):
     @override
     def predict_step(
         self, batch: Batch, *args: Any, **kwargs: Any
-    ) -> cr.CertificationResult:
-        inputs, targets = batch
-        self._predict_cert.update(inputs, targets)
-        result = cast("cr.CertificationResult", self._predict_cert.compute())
-        self._predict_cert.reset()
-        return result
+    ) -> cr.CertificationResult | None:
+        if self._predict_cert:
+            inputs, targets = batch
+            self._predict_cert.update(inputs, targets)
+            result = cast("cr.CertificationResult", self._predict_cert.compute())
+            self._predict_cert.reset()
+            return result
+        return None
 
     def _default_eval_step(self, batch: Batch) -> StepOutput:
         inputs, targets = batch
-        predictions = self.forward(inputs)
+        predictions = self.forward(inputs, add_noise=True)
         loss = self._criterion(predictions, targets)
         return {"loss": loss, "predictions": predictions}

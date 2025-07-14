@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     import lightning as L
 
     from benchmark_ctrs.datasets.module import BaseDataModule
-    from benchmark_ctrs.modules.module import BaseRandomizedSmoothing
+    from benchmark_ctrs.modules.module import BaseModule
 
 
 @plugins.hookimpl
@@ -36,7 +36,7 @@ def register_data_modules() -> Sequence[type[BaseDataModule]]:
 
 
 @plugins.hookimpl
-def register_models() -> Sequence[type[BaseRandomizedSmoothing]]:
+def register_models() -> Sequence[type[BaseModule]]:
     from benchmark_ctrs.modules.gaussian_aug import GaussianAug
     from benchmark_ctrs.modules.standard import Standard
 

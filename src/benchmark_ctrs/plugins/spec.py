@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     import lightning as L
 
     from benchmark_ctrs.datasets.module import BaseDataModule
-    from benchmark_ctrs.modules.module import BaseRandomizedSmoothing
+    from benchmark_ctrs.modules.module import BaseModule
 
     class HookType:
         @staticmethod
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
             ...
 
         @staticmethod
-        def register_models() -> Sequence[type[BaseRandomizedSmoothing]]:
+        def register_models() -> Sequence[type[BaseModule]]:
             """
             Return all lightning module types that should be accessible to the CLI
             """
@@ -51,6 +51,6 @@ def register_data_modules() -> Sequence[type[BaseDataModule]]:
 
 
 @hookspec
-def register_models() -> Sequence[type[BaseRandomizedSmoothing]]:
+def register_models() -> Sequence[type[BaseModule]]:
     """Return all lightning module types that should be accessible to the CLI"""
     ...  # noqa: PIE790

@@ -9,23 +9,19 @@ from lightning.pytorch.core import LightningModule
 from lightning.pytorch.trainer import Trainer
 from typing_extensions import override
 
-from benchmark_ctrs.modules.module import BaseRandomizedSmoothing
+from benchmark_ctrs.modules.module import BaseModule
+from benchmark_ctrs.utilities import check_valid_submodule
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from lightning import LightningModule, Trainer
-    from typing_extensions import TypeIs
 
     from benchmark_ctrs.metrics.certified_radius import CertificationResult
     from benchmark_ctrs.modules.module import Batch
 
 
 FIELDS: Final = ("idx", "label", "predict", "radius", "correct")
-
-
-def _validate_module(module: Any) -> TypeIs[BaseRandomizedSmoothing]:
-    return isinstance(module, BaseRandomizedSmoothing)
 
 
 class CertifiedRadiusWriter(BasePredictionWriter):
@@ -41,10 +37,10 @@ class CertifiedRadiusWriter(BasePredictionWriter):
     def on_predict_epoch_start(
         self, trainer: Trainer, pl_module: LightningModule
     ) -> None:
-        if not _validate_module(pl_module):
+        if not check_valid_submodule(pl_module):
             raise TypeError(
                 "Only modules that are subclasses of "
-                f"{BaseRandomizedSmoothing.__qualname__} are supported"
+                f"{BaseModule.__qualname__} are supported"
             )
         path = self._resolve_output_path(trainer)
         with path.open("tw") as f:
@@ -56,17 +52,22 @@ class CertifiedRadiusWriter(BasePredictionWriter):
         self,
         trainer: Trainer,
         pl_module: LightningModule,
-        prediction: CertificationResult,
+        prediction: CertificationResult | None,
         batch_indices: Sequence[int] | None,
         batch: Batch,
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        if not _validate_module(pl_module):
+        if not check_valid_submodule(pl_module):
             raise TypeError(
                 "Only modules that are subclasses of "
-                f"{BaseRandomizedSmoothing.__qualname__} are supported"
+                f"{BaseModule.__qualname__} are supported"
             )
+        if not prediction:
+            raise TypeError(
+                "return type of `predict_step` should be `CertificationResult`"
+            )
+
         if batch_indices is None:
             raise ValueError("Batch indices is required")
         batch_indices = list(batch_indices)
