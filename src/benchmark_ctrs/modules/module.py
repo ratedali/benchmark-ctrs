@@ -207,10 +207,13 @@ class BaseModule(LightningModule, ABC):
         self.log("time/sec", self._batch_time, on_epoch=True)
 
         with torch.no_grad():
-            if loss := outputs.get("loss"):
+            if (loss := outputs.get("loss")) is not None:
                 self._loss_train(loss)
 
-            if self.automatic_accuracy and (predictions := outputs.get("predictions")):
+            if (
+                self.automatic_accuracy
+                and (predictions := outputs.get("predictions")) is not None
+            ):
                 self._acc_train.update(predictions, batch[1])
 
         if self._loss_train.update_called:
@@ -238,10 +241,13 @@ class BaseModule(LightningModule, ABC):
 
         inputs, targets = batch
 
-        if loss := outputs.get("loss"):
+        if (loss := outputs.get("loss")) is not None:
             self._loss_val.update(loss)
 
-        if self.automatic_accuracy and (predictions := outputs.get("predictions")):
+        if (
+            self.automatic_accuracy
+            and (predictions := outputs.get("predictions")) is not None
+        ):
             self._acc_val.update(predictions, targets)
 
         if self._val_cert is not None:
