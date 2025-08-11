@@ -13,7 +13,7 @@ from benchmark_ctrs.models import Architecture
 
 class CIFAR10(BaseDataModule):
     __means: Final = [0.4914, 0.4822, 0.4465]
-    __sds: Final = [0.2023, 0.1994, 0.2010]
+    __sds: Final = [0.2470, 0.2435, 0.2616]
 
     def __init__(self, *args: Any, batch_size: int = 400, **kwargs: Any):
         super().__init__(*args, **kwargs, batch_size=batch_size)
@@ -37,7 +37,7 @@ class CIFAR10(BaseDataModule):
                         ]
                     ),
                 ),
-                lengths=(45000, 5000),
+                lengths=(49000, 1000),
             )
         elif stage == "test":
             self._test = cifar.CIFAR10(

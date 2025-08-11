@@ -38,9 +38,9 @@ def register_data_modules() -> Sequence[type[BaseDataModule]]:
 @plugins.hookimpl
 def register_models() -> Sequence[type[BaseModule]]:
     from benchmark_ctrs.modules.gaussian_aug import GaussianAug
-    from benchmark_ctrs.modules.standard import Standard
+    from benchmark_ctrs.modules.standard import CIFAR10Standard
 
     return (
         GaussianAug,
-        Standard,
+        CIFAR10Standard,
     )

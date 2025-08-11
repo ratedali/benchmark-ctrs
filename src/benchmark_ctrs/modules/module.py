@@ -208,7 +208,10 @@ class BaseModule(LightningModule, ABC):
 
         with torch.no_grad():
             if (loss := outputs.get("loss")) is not None:
-                self._loss_train(loss)
+                if loss.dim() > 0:
+                    batch_size = batch[0].size(0)
+                    loss = loss.sum() / batch_size
+                self._loss_train(loss.item())
 
             if (
                 self.automatic_accuracy
@@ -242,7 +245,10 @@ class BaseModule(LightningModule, ABC):
         inputs, targets = batch
 
         if (loss := outputs.get("loss")) is not None:
-            self._loss_val.update(loss)
+            if loss.dim() > 0:
+                batch_size = batch[0].size(0)
+                loss = loss.sum() / batch_size
+            self._loss_val.update(loss.item())
 
         if (
             self.automatic_accuracy
@@ -267,11 +273,11 @@ class BaseModule(LightningModule, ABC):
 
     @override
     def validation_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput:
-        return self._default_eval_step(batch)
+        return self._default_eval_step(batch, add_noise=True)
 
     @override
     def test_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput:
-        return self._default_eval_step(batch)
+        return self._default_eval_step(batch, add_noise=True)
 
     @override
     def predict_step(
@@ -285,8 +291,10 @@ class BaseModule(LightningModule, ABC):
             return result
         return None
 
-    def _default_eval_step(self, batch: Batch) -> StepOutput:
+    def _default_eval_step(
+        self, batch: Batch, *, add_noise: bool = False
+    ) -> StepOutput:
         inputs, targets = batch
-        predictions = self.forward(inputs, add_noise=True)
+        predictions = self.forward(inputs, add_noise=add_noise)
         loss = self._criterion(predictions, targets)
         return {"loss": loss, "predictions": predictions}

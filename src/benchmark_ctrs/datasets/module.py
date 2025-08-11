@@ -57,6 +57,7 @@ class BaseDataModule(L.LightningDataModule, ABC):
             self._train,
             batch_size=self.hparams["batch_size"],
             num_workers=self.hparams["workers"],
+            persistent_workers=True,
             shuffle=True,
         )
 
@@ -68,6 +69,7 @@ class BaseDataModule(L.LightningDataModule, ABC):
             self._val,
             batch_size=self.hparams["batch_size"],
             num_workers=self.hparams["workers"],
+            persistent_workers=True,
         )
 
     @override
@@ -78,6 +80,7 @@ class BaseDataModule(L.LightningDataModule, ABC):
             self._test,
             batch_size=self.hparams["batch_size"],
             num_workers=self.hparams["workers"],
+            persistent_workers=True,
         )
 
     @override
@@ -88,4 +91,5 @@ class BaseDataModule(L.LightningDataModule, ABC):
             self._predict,
             batch_size=self.hparams["batch_size"],
             num_workers=self.hparams["workers"],
+            persistent_workers=True,
         )

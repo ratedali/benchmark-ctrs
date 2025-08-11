@@ -3,12 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from torch.optim import SGD
+from torch.optim.lr_scheduler import ConstantLR, MultiStepLR, SequentialLR
 from typing_extensions import override
 
 from benchmark_ctrs.modules import BaseHParams, BaseModule
 
 if TYPE_CHECKING:
-    from benchmark_ctrs.types import Batch, StepOutput
+    from benchmark_ctrs.types import CONFIGURE_OPTIMIZERS, Batch, StepOutput
 
 
 @dataclass(frozen=True)
@@ -21,13 +23,28 @@ class HParams(BaseHParams):
     weight_decay: float = 1e-4
 
 
-class Standard(BaseModule):
+class CIFAR10Standard(BaseModule):
     def __init__(self, *args, params: HParams, **kwargs) -> None:
         super().__init__(
             *args,
             params=params,
             **kwargs,
         )
+
+    def configure_optimizers(self) -> CONFIGURE_OPTIMIZERS:
+        optimizer = SGD(
+            self.parameters(),
+            lr=self.hparams_initial.learning_rate,
+            momentum=self.hparams_initial.momentum,
+            weight_decay=self.hparams_initial.weight_decay,
+        )
+        warmup_lr = ConstantLR(optimizer, factor=0.1, total_iters=1)
+        step_lr = MultiStepLR(optimizer, [90, 138], gamma=0.1)
+        scheduler = SequentialLR(optimizer, [warmup_lr, step_lr], milestones=[1])
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": scheduler,
+        }
 
     @override
     def training_step(
@@ -39,7 +56,12 @@ class Standard(BaseModule):
         return self._default_eval_step(batch)
 
     @override
-    def _default_eval_step(self, batch: Batch) -> StepOutput:
+    def _default_eval_step(
+        self,
+        batch: Batch,
+        *args: Any,
+        **kwargs: Any,
+    ) -> StepOutput:
         inputs, targets = batch
         predictions = self.forward(inputs, add_noise=False)
         loss = self._criterion(predictions, targets)

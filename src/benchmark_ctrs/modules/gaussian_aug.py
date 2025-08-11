@@ -31,4 +31,4 @@ class GaussianAug(BaseModule):
         *args: Any,
         **kwargs: Any,
     ) -> StepOutput:
-        return self._default_eval_step(batch)
+        return self._default_eval_step(batch, add_noise=True)

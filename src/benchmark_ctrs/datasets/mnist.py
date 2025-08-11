@@ -27,7 +27,7 @@ class MNIST(BaseDataModule):
         if stage == "fit":
             self._train, self._val = random_split(
                 dataset=mnist.MNIST(self._cache_dir, train=True, transform=ToTensor()),
-                lengths=(55000, 5000),
+                lengths=(59000, 1000),
             )
         elif stage == "test":
             self._test = mnist.MNIST(self._cache_dir, train=False, transform=ToTensor())
