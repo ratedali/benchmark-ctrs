@@ -242,7 +242,7 @@ class BaseModule(LightningModule, ABC):
                 f"'loss' and 'predictions', got value: {outputs}"
             )
 
-        inputs, targets = batch
+        inputs, targets, *_ = batch
 
         if (loss := outputs.get("loss")) is not None:
             if loss.dim() > 0:
@@ -284,7 +284,7 @@ class BaseModule(LightningModule, ABC):
         self, batch: Batch, *args: Any, **kwargs: Any
     ) -> cr.CertificationResult | None:
         if self._predict_cert:
-            inputs, targets = batch
+            inputs, targets, *_ = batch
             self._predict_cert.update(inputs, targets)
             result = cast("cr.CertificationResult", self._predict_cert.compute())
             self._predict_cert.reset()
@@ -294,7 +294,7 @@ class BaseModule(LightningModule, ABC):
     def _default_eval_step(
         self, batch: Batch, *, add_noise: bool = False
     ) -> StepOutput:
-        inputs, targets = batch
+        inputs, targets, *_ = batch
         predictions = self.forward(inputs, add_noise=add_noise)
         loss = self._criterion(predictions, targets)
         return {"loss": loss, "predictions": predictions}
