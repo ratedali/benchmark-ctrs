@@ -11,6 +11,7 @@ from lightning import LightningModule
 from torch import Tensor
 from torch.optim import SGD
 from torch.optim.lr_scheduler import StepLR
+from torch.profiler import record_function
 from torchmetrics import MetricCollection
 from torchmetrics.aggregation import MeanMetric
 from torchmetrics.classification import Accuracy
@@ -295,6 +296,8 @@ class BaseModule(LightningModule, ABC):
         self, batch: Batch, *, add_noise: bool = False
     ) -> StepOutput:
         inputs, targets, *_ = batch
-        predictions = self.forward(inputs, add_noise=add_noise)
-        loss = self._criterion(predictions, targets)
+        with record_function("sampling"):
+            predictions = self.forward(inputs, add_noise=add_noise)
+        with record_function("classification_loss"):
+            loss = self._criterion(predictions, targets)
         return {"loss": loss, "predictions": predictions}
