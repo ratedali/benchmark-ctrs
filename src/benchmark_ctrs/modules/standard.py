@@ -7,6 +7,7 @@ from torch.optim import SGD
 from torch.optim.lr_scheduler import ConstantLR, MultiStepLR, SequentialLR
 from typing_extensions import override
 
+from benchmark_ctrs.models import Architecture
 from benchmark_ctrs.modules import BaseHParams, BaseModule
 
 if TYPE_CHECKING:
@@ -23,7 +24,7 @@ class HParams(BaseHParams):
     weight_decay: float = 1e-4
 
 
-class CIFAR10Standard(BaseModule):
+class CIFARStandard(BaseModule):
     def __init__(self, *args, params: HParams, **kwargs) -> None:
         super().__init__(
             *args,
@@ -38,12 +39,18 @@ class CIFAR10Standard(BaseModule):
             momentum=self.hparams_initial.momentum,
             weight_decay=self.hparams_initial.weight_decay,
         )
-        warmup_lr = ConstantLR(optimizer, factor=0.1, total_iters=1)
-        step_lr = MultiStepLR(optimizer, [90, 138], gamma=0.1)
-        scheduler = SequentialLR(optimizer, [warmup_lr, step_lr], milestones=[1])
+        step_lr = MultiStepLR(optimizer, [60, 120], gamma=0.1)
+        if self._arch == Architecture.CIFARResNet110:
+            warmup_lr = ConstantLR(optimizer, factor=0.1, total_iters=1)
+            scheduler = SequentialLR(optimizer, [warmup_lr, step_lr], milestones=[1])
+        else:
+            scheduler = step_lr
         return {
             "optimizer": optimizer,
-            "lr_scheduler": scheduler,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "epoch",
+            },
         }
 
     @override

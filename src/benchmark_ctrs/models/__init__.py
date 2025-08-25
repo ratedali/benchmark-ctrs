@@ -2,13 +2,19 @@ from typing import Literal
 
 from lightning.pytorch.utilities import LightningEnum
 
-ArchitectureValues = Literal["lenet", "resnet50", "resnet110"]
+ArchitectureValues = Literal[
+    "lenet",
+    "cifar_resnet18",
+    "cifar_resnet110",
+    "resnet50",
+]
 
 
 class Architecture(LightningEnum):
     LeNet = "lenet"
-    Resnet50 = "resnet50"
-    Resnet110 = "resnet110"
+    CIFARResNet18 = "cifar_resnet18"
+    CIFARResNet110 = "cifar_resnet110"
+    ResNet50 = "resnet50"
 
 
 __all__ = [

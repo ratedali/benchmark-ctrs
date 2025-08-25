@@ -62,7 +62,7 @@ class ImageNet(BaseDataModule):
     @property
     @override
     def default_arch(self) -> Architecture:
-        return Architecture.Resnet50
+        return Architecture.ResNet50
 
     @property
     @override
@@ -71,10 +71,10 @@ class ImageNet(BaseDataModule):
 
     @property
     @override
-    def means(self) -> list[float]:
+    def mean(self) -> list[float]:
         return ImageNet.__means
 
     @property
     @override
-    def sds(self) -> list[float]:
+    def std(self) -> list[float]:
         return ImageNet.__sds

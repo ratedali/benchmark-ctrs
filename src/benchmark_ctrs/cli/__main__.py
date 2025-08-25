@@ -68,18 +68,12 @@ class BenchmarkCTRSCLI(LightningCLI):
             "data.classes", "model.init_args.num_classes", apply_on="instantiate"
         )
         parser.link_arguments(
-            "data.means", "model.init_args.means", apply_on="instantiate"
+            "data.mean", "model.init_args.mean", apply_on="instantiate"
         )
-        parser.link_arguments("data.sds", "model.init_args.sds", apply_on="instantiate")
+        parser.link_arguments("data.std", "model.init_args.std", apply_on="instantiate")
         parser.link_arguments(
             "data.default_arch",
             "model.init_args.arch",
-            apply_on="instantiate",
-        )
-        parser.link_arguments(
-            "data",
-            "model.init_args.is_imagenet",
-            compute_fn=lambda dataset: isinstance(dataset, ImageNet),
             apply_on="instantiate",
         )
 

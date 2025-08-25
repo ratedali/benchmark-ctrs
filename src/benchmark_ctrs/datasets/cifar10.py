@@ -51,7 +51,7 @@ class CIFAR10(BaseDataModule):
     @property
     @override
     def default_arch(self) -> Architecture:
-        return Architecture.Resnet110
+        return Architecture.CIFARResNet110
 
     @property
     @override
@@ -60,10 +60,10 @@ class CIFAR10(BaseDataModule):
 
     @property
     @override
-    def means(self) -> list[float]:
+    def mean(self) -> list[float]:
         return CIFAR10.__means
 
     @property
     @override
-    def sds(self) -> list[float]:
+    def std(self) -> list[float]:
         return CIFAR10.__sds

@@ -47,11 +47,11 @@ class BaseDataModule(L.LightningDataModule, ABC):
 
     @property
     @abstractmethod
-    def means(self) -> list[float]: ...
+    def mean(self) -> list[float]: ...
 
     @property
     @abstractmethod
-    def sds(self) -> list[float]: ...
+    def std(self) -> list[float]: ...
 
     @override
     def train_dataloader(self) -> TRAIN_DATALOADERS:

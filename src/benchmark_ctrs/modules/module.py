@@ -16,14 +16,14 @@ from torchmetrics import MetricCollection
 from torchmetrics.aggregation import MeanMetric
 from torchmetrics.classification import Accuracy
 from torchmetrics.wrappers import FeatureShare
-from torchvision.models import resnet50
+from torchvision import models
 from typing_extensions import override
 
 from benchmark_ctrs.metrics import certified_radius as cr
 from benchmark_ctrs.models import Architecture, ArchitectureValues
+from benchmark_ctrs.models.cifar_resnet import resnet as cifar_resnet
 from benchmark_ctrs.models.layers import Normalization
 from benchmark_ctrs.models.lenet import LeNet
-from benchmark_ctrs.models.resnet import CIFARResNet
 from benchmark_ctrs.utilities import check_valid_step_output
 
 if TYPE_CHECKING:
@@ -50,11 +50,10 @@ class BaseModule(LightningModule, ABC):
         *,
         arch: ArchitectureValues,
         num_classes: int,
-        sds: list[float],
-        means: list[float],
+        std: list[float],
+        mean: list[float],
         params: HParams,
         cert: cr.Params | None = None,
-        is_imagenet: bool = False,
     ) -> None:
         super().__init__()
         self.save_hyperparameters(dataclasses.asdict(params))
@@ -63,10 +62,9 @@ class BaseModule(LightningModule, ABC):
         self._num_classes = num_classes
         self._cert_params = cert
 
-        self.__is_imagenet = is_imagenet
-        self.__arch = Architecture.from_str(arch, source="value")
-        self.__means = means
-        self.__sds = sds
+        self._arch = Architecture.from_str(arch, source="value")
+        self._mean = mean
+        self._std = std
 
         self.automatic_accuracy: bool = True
         self._acc_train = MetricCollection(
@@ -83,26 +81,26 @@ class BaseModule(LightningModule, ABC):
 
     @override
     def setup(self, stage: str) -> None:
-        if self.__arch == Architecture.LeNet:
-            self.__base_model = LeNet()
-        elif self.__arch == Architecture.Resnet50:
-            if self.__is_imagenet:
-                self.__base_model = resnet50()
-            else:
-                self.__base_model = CIFARResNet(depth=50, num_classes=self._num_classes)
-        elif self.__arch == Architecture.Resnet110:
-            self.__base_model = CIFARResNet(depth=110, num_classes=self._num_classes)
+        if self._arch == Architecture.LeNet:
+            self._raw_model = LeNet()
+        elif self._arch == Architecture.CIFARResNet18:
+            self._raw_model = cifar_resnet(depth=18, num_classes=self._num_classes)
+        elif self._arch == Architecture.CIFARResNet110:
+            self._raw_model = cifar_resnet(depth=110, num_classes=self._num_classes)
+        elif self._arch == Architecture.ResNet50:
+            self._raw_model = models.resnet50(
+                weights=None,
+                num_classes=self._num_classes,
+            )
         else:
             raise ValueError(
-                f"Unknown value for arch: {self.__arch}. "
+                f"Unknown value for arch: {self._arch}. "
                 f"Possible values are: {', '.join(Architecture._member_names_)}"
             )
 
         self._criterion = torch.nn.CrossEntropyLoss()
-        self.__norm_layer = Normalization(mean=self.__means, sd=self.__sds)
-        self._base_classifier = torch.nn.Sequential(
-            self.__norm_layer, self.__base_model
-        )
+        self._norm = Normalization(mean=self._mean, sd=self._std)
+        self._model = torch.nn.Sequential(self._norm, self._raw_model)
 
         self._val_cert = None
         if (
@@ -113,21 +111,21 @@ class BaseModule(LightningModule, ABC):
             self._val_cert = FeatureShare(
                 {
                     "certified_radius/average": cr.CertifiedRadius(
-                        self._base_classifier,
+                        self._model,
                         self._cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
                         reduction="mean",
                     ),
                     "certified_radius/best": cr.CertifiedRadius(
-                        self._base_classifier,
+                        self._model,
                         self._cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
                         reduction="max",
                     ),
                     "certified_radius/worst": cr.CertifiedRadius(
-                        self._base_classifier,
+                        self._model,
                         self._cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
@@ -139,7 +137,7 @@ class BaseModule(LightningModule, ABC):
         self._predict_cert = None
         if stage == "predict" and self._cert_params and self.hparams["sigma"] > 0:
             self._predict_cert = cr.CertifiedRadius(
-                self._base_classifier,
+                self._model,
                 self._cert_params,
                 num_classes=self._num_classes,
                 sigma=self.hparams["sigma"],
@@ -167,8 +165,8 @@ class BaseModule(LightningModule, ABC):
     ) -> Tensor:
         if add_noise:
             noises = torch.randn_like(inputs) * self.hparams["sigma"]
-            return self._base_classifier(inputs + noises)
-        return self._base_classifier(inputs)
+            return self._model(inputs + noises)
+        return self._model(inputs)
 
     @override
     def on_train_start(self) -> None:

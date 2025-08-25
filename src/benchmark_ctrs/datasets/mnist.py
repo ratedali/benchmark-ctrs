@@ -48,10 +48,10 @@ class MNIST(BaseDataModule):
 
     @property
     @override
-    def means(self) -> list[float]:
+    def mean(self) -> list[float]:
         return MNIST.__means
 
     @property
     @override
-    def sds(self) -> list[float]:
+    def std(self) -> list[float]:
         return MNIST.__sds
