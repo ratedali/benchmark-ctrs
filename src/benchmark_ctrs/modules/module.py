@@ -148,23 +148,31 @@ class BaseModule(LightningModule, ABC):
     def configure_optimizers(self) -> CONFIGURE_OPTIMIZERS:
         optimizer = SGD(
             self.parameters(),
-            lr=self.hparams_initial.learning_rate,
-            momentum=self.hparams_initial.momentum,
-            weight_decay=self.hparams_initial.weight_decay,
+            lr=self.hparams["learning_rate"],
+            momentum=self.hparams["momentum"],
+            weight_decay=self.hparams["weight_decay"],
         )
         scheduler = StepLR(
             optimizer,
-            step_size=self.hparams_initial.lr_step,
-            gamma=self.hparams_initial.lr_decay,
+            step_size=self.hparams["lr_step"],
+            gamma=self.hparams["lr_decay"],
         )
-        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "interval": "epoch",
+                "frequency": 1,
+            },
+        }
 
     @override
     def forward(
         self, inputs: Tensor, *args: Any, add_noise: bool = True, **kwargs: Any
     ) -> Tensor:
-        if add_noise:
-            noises = torch.randn_like(inputs) * self.hparams["sigma"]
+        sigma = self.hparams["sigma"]
+        if add_noise and sigma > 0:
+            noises = torch.randn_like(inputs) * sigma
             return self._model(inputs + noises)
         return self._model(inputs)
 

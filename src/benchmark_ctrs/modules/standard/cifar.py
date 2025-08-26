@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import dataclasses
 from typing import TYPE_CHECKING, Any
 
 from torch.optim import SGD
@@ -14,12 +14,11 @@ if TYPE_CHECKING:
     from benchmark_ctrs.types import CONFIGURE_OPTIMIZERS, Batch, StepOutput
 
 
-@dataclass(frozen=True)
-class HParams(BaseHParams):
-    sigma: float = 0.0
+@dataclasses.dataclass(frozen=True)
+class HParams:
     learning_rate: float = 0.1
     lr_decay: float = 0.1
-    lr_step: int = 60
+    lr_step: int = 30
     momentum: float = 0.9
     weight_decay: float = 1e-4
 
@@ -28,18 +27,20 @@ class CIFARStandard(BaseModule):
     def __init__(self, *args, params: HParams, **kwargs) -> None:
         super().__init__(
             *args,
-            params=params,
+            params=BaseHParams(sigma=0.0, **dataclasses.asdict(params)),
             **kwargs,
         )
 
     def configure_optimizers(self) -> CONFIGURE_OPTIMIZERS:
         optimizer = SGD(
             self.parameters(),
-            lr=self.hparams_initial.learning_rate,
-            momentum=self.hparams_initial.momentum,
-            weight_decay=self.hparams_initial.weight_decay,
+            lr=self.hparams["learning_rate"],
+            momentum=self.hparams["momentum"],
+            weight_decay=self.hparams["weight_decay"],
         )
-        step_lr = MultiStepLR(optimizer, [60, 120], gamma=0.1)
+        step = self.hparams["lr_step"]
+        milestones = list(range(step, self.trainer.max_epochs or 150, step))
+        step_lr = MultiStepLR(optimizer, milestones, gamma=0.1)
         if self._arch == Architecture.CIFARResNet110:
             warmup_lr = ConstantLR(optimizer, factor=0.1, total_iters=1)
             scheduler = SequentialLR(optimizer, [warmup_lr, step_lr], milestones=[1])
