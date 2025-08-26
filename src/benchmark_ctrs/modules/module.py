@@ -10,7 +10,7 @@ import torch
 from lightning import LightningModule
 from torch import Tensor
 from torch.optim import SGD
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import ConstantLR, SequentialLR, StepLR
 from torch.profiler import record_function
 from torchmetrics import MetricCollection
 from torchmetrics.aggregation import MeanMetric
@@ -32,6 +32,9 @@ if TYPE_CHECKING:
     from lightning.pytorch.utilities.types import STEP_OUTPUT
 
     from benchmark_ctrs.types import CONFIGURE_OPTIMIZERS, Batch, StepOutput
+
+
+WARMUP_DEPTH_THRESHOLD = 110
 
 
 @dataclasses.dataclass(frozen=True)
@@ -62,7 +65,7 @@ class BaseModule(LightningModule, ABC):
         self._num_classes = num_classes
         self._cert_params = cert
 
-        self._arch = Architecture.from_str(arch, source="value")
+        self._arch = cast("Architecture", Architecture.from_str(arch, source="value"))
         self._mean = mean
         self._std = std
 
@@ -83,14 +86,14 @@ class BaseModule(LightningModule, ABC):
     def setup(self, stage: str) -> None:
         if self._arch == Architecture.LeNet:
             self._raw_model = LeNet()
-        elif self._arch == Architecture.CIFARResNet18:
-            self._raw_model = cifar_resnet(depth=18, num_classes=self._num_classes)
-        elif self._arch == Architecture.CIFARResNet110:
-            self._raw_model = cifar_resnet(depth=110, num_classes=self._num_classes)
         elif self._arch == Architecture.ResNet50:
             self._raw_model = models.resnet50(
                 weights=None,
                 num_classes=self._num_classes,
+            )
+        elif self._arch.is_cifarresnet:
+            self._raw_model = cifar_resnet(
+                depth=self._arch.resnet_depth, num_classes=self._num_classes
             )
         else:
             raise ValueError(
@@ -152,11 +155,13 @@ class BaseModule(LightningModule, ABC):
             momentum=self.hparams["momentum"],
             weight_decay=self.hparams["weight_decay"],
         )
-        scheduler = StepLR(
-            optimizer,
-            step_size=self.hparams["lr_step"],
-            gamma=self.hparams["lr_decay"],
-        )
+
+        step_lr = StepLR(optimizer, self.hparams["lr_step"], gamma=0.1)
+        if self._arch.is_resnet and self._arch.resnet_depth >= WARMUP_DEPTH_THRESHOLD:
+            warmup_lr = ConstantLR(optimizer, factor=0.1, total_iters=1)
+            scheduler = SequentialLR(optimizer, [warmup_lr, step_lr], milestones=[1])
+        else:
+            scheduler = step_lr
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
