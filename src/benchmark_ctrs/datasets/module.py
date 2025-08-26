@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 class BaseDataModule(L.LightningDataModule, ABC):
     __default_cache_dir: ClassVar = Path("datasets_cache")
 
+    default_arch: ClassVar[Architecture | None] = None
+
     def __init__(
         self,
         *,
@@ -36,10 +38,6 @@ class BaseDataModule(L.LightningDataModule, ABC):
         self._val: Dataset | None = None
         self._test: Dataset | None = None
         self._predict: Dataset | None = None
-
-    @property
-    def default_arch(self) -> Architecture | None:
-        return None
 
     @property
     @abstractmethod

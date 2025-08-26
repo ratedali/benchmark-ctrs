@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Final
+from typing import Any, ClassVar, Final
 
 from torch.utils.data import random_split
 from torchvision.datasets import imagenet
@@ -21,6 +21,8 @@ from benchmark_ctrs.models import Architecture
 class ImageNet(BaseDataModule):
     __means: Final = [0.485, 0.456, 0.406]
     __sds: Final = [0.229, 0.224, 0.225]
+
+    default_arch: ClassVar = Architecture.ResNet50
 
     def __init__(self, *args: Any, batch_size: int = 64, **kwargs: Any):
         super().__init__(*args, batch_size=batch_size, **kwargs)
@@ -58,11 +60,6 @@ class ImageNet(BaseDataModule):
             self._predict = imagenet.ImageNet(
                 self._cache_dir, split="val", transform=self.__test_transforms
             )
-
-    @property
-    @override
-    def default_arch(self) -> Architecture:
-        return Architecture.ResNet50
 
     @property
     @override

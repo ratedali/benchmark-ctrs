@@ -4,7 +4,7 @@ from lightning.pytorch.utilities import LightningEnum
 
 ArchitectureValues = Literal[
     "lenet",
-    "cifar_resnet18",
+    "cifar_resnet20",
     "cifar_resnet110",
     "resnet50",
 ]
@@ -12,7 +12,7 @@ ArchitectureValues = Literal[
 
 class Architecture(LightningEnum):
     LeNet = "lenet"
-    CIFARResNet18 = "cifar_resnet18"
+    CIFARResNet20 = "cifar_resnet20"
     CIFARResNet110 = "cifar_resnet110"
     ResNet50 = "resnet50"
 
@@ -31,7 +31,7 @@ class Architecture(LightningEnum):
                 "Architecture.resnet_depth is only supported on ResNet architectures"
             )
         return {
-            "cifar_resnet18": 18,
+            "cifar_resnet20": 20,
             "resnet50": 50,
             "cifar_resnet110": 110,
         }[self.value]

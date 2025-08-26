@@ -51,12 +51,13 @@ class BaseModule(LightningModule, ABC):
     def __init__(
         self,
         *,
-        arch: ArchitectureValues,
         num_classes: int,
         std: list[float],
         mean: list[float],
         params: HParams,
         cert: cr.Params | None = None,
+        arch: ArchitectureValues | None = None,
+        default_arch: ArchitectureValues = "resnet50",
     ) -> None:
         super().__init__()
         self.save_hyperparameters(dataclasses.asdict(params))
@@ -65,7 +66,10 @@ class BaseModule(LightningModule, ABC):
         self._num_classes = num_classes
         self._cert_params = cert
 
-        self._arch = cast("Architecture", Architecture.from_str(arch, source="value"))
+        self._arch = cast(
+            "Architecture",
+            Architecture.from_str(arch or default_arch, source="value"),
+        )
         self._mean = mean
         self._std = std
 

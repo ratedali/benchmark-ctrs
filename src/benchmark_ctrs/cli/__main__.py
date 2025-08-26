@@ -73,7 +73,7 @@ class BenchmarkCTRSCLI(LightningCLI):
         parser.link_arguments("data.std", "model.init_args.std", apply_on="instantiate")
         parser.link_arguments(
             "data.default_arch",
-            "model.init_args.arch",
+            "model.init_args.default_arch",
             apply_on="instantiate",
         )
 

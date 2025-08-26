@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Final
+from typing import Any, ClassVar, Final
 
 from torch.utils.data import random_split
 from torchvision.datasets import cifar
@@ -14,6 +14,8 @@ from benchmark_ctrs.models import Architecture
 class CIFAR10(BaseDataModule):
     __means: Final = [0.4914, 0.4822, 0.4465]
     __sds: Final = [0.2470, 0.2435, 0.2616]
+
+    default_arch: ClassVar = Architecture.CIFARResNet110
 
     def __init__(self, *args: Any, batch_size: int = 400, **kwargs: Any):
         super().__init__(*args, **kwargs, batch_size=batch_size)
@@ -47,11 +49,6 @@ class CIFAR10(BaseDataModule):
             self._predict = cifar.CIFAR10(
                 self._cache_dir, train=False, transform=ToTensor()
             )
-
-    @property
-    @override
-    def default_arch(self) -> Architecture:
-        return Architecture.CIFARResNet110
 
     @property
     @override

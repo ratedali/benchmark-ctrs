@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Final
+from typing import Any, ClassVar, Final
 
 from torch.utils.data import random_split
 from torchvision.datasets import mnist
@@ -14,6 +14,8 @@ from benchmark_ctrs.models import Architecture
 class MNIST(BaseDataModule):
     __means: Final = [0.0]
     __sds: Final = [1.0]
+
+    default_arch: ClassVar = Architecture.LeNet
 
     def __init__(self, *args: Any, batch_size: int = 400, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs, batch_size=batch_size)
@@ -35,11 +37,6 @@ class MNIST(BaseDataModule):
             self._predict = mnist.MNIST(
                 self._cache_dir, train=False, transform=ToTensor()
             )
-
-    @property
-    @override
-    def default_arch(self) -> Architecture:
-        return Architecture.LeNet
 
     @property
     @override
