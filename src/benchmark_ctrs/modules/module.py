@@ -350,6 +350,6 @@ class BaseModule(LightningModule, ABC):
             tensorboard = cast("SummaryWriter", self.logger.experiment)
             tensorboard.add_histogram(
                 tag="backprop/grad_l2_norms",
-                values=list(norms.values()),
+                values=torch.tensor(list(norms.values())),
                 global_step=self.trainer.global_step,
             )
