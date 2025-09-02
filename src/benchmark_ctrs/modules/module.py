@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, cast
 
 import torch
 from lightning import LightningModule
+from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.utilities import grad_norm
 from torch import Tensor
 from torch.optim import SGD
 from torch.optim.lr_scheduler import ConstantLR, SequentialLR, StepLR
@@ -30,6 +32,8 @@ if TYPE_CHECKING:
     from typing import Any
 
     from lightning.pytorch.utilities.types import STEP_OUTPUT
+    from tensorboardX import SummaryWriter
+    from torch.optim.optimizer import Optimizer
 
     from benchmark_ctrs.types import CONFIGURE_OPTIMIZERS, Batch, StepOutput
 
@@ -58,6 +62,7 @@ class BaseModule(LightningModule, ABC):
         cert: cr.Params | None = None,
         arch: ArchitectureValues | None = None,
         default_arch: ArchitectureValues = "resnet50",
+        grads_log_interval: int = 0,
     ) -> None:
         super().__init__()
         self.save_hyperparameters(dataclasses.asdict(params))
@@ -65,6 +70,7 @@ class BaseModule(LightningModule, ABC):
 
         self._num_classes = num_classes
         self._cert_params = cert
+        self._grads_log_interval = grads_log_interval
 
         self._arch = cast(
             "Architecture",
@@ -239,6 +245,13 @@ class BaseModule(LightningModule, ABC):
             self.log("train/loss", self._loss_train, on_epoch=True)
 
     @override
+    def on_before_optimizer_step(self, optimizer: Optimizer) -> None:
+        super().on_before_optimizer_step(optimizer)
+        interval = self._grads_log_interval
+        if interval > 0 and self.trainer.global_step % interval == 0:
+            self.log_grad_norms()
+
+    @override
     def on_train_epoch_end(self) -> None:
         super().on_train_epoch_end()
         if any(m.update_called for m in self._acc_train.values()):
@@ -316,3 +329,27 @@ class BaseModule(LightningModule, ABC):
         with record_function("classification_loss"):
             loss = self._criterion(predictions, targets)
         return {"loss": loss, "predictions": predictions}
+
+    def log_grad_norms(self, norm_type: float | str = 2) -> None:
+        """Utility to compute and log grad norms.
+
+        It gets called in the before_optimizer_step hook,
+        if automatic optimization is used.
+
+        Needs to be called manually, when using manual
+        optimization.
+
+        """
+        norms = grad_norm(self._model, norm_type=norm_type)
+        self.log(
+            "backprop/grad_l2_norm_total",
+            norms.pop("grad_2.0_norm_total", 0.0),
+        )
+
+        if isinstance(self.logger, TensorBoardLogger):
+            tensorboard = cast("SummaryWriter", self.logger.experiment)
+            tensorboard.add_histogram(
+                tag="backprop/grad_l2_norms",
+                values=list(norms.values()),
+                global_step=self.trainer.global_step,
+            )
