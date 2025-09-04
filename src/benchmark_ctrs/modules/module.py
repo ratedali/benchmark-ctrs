@@ -3,37 +3,44 @@ from __future__ import annotations
 import dataclasses
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
+from functools import partial
 from itertools import chain
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, Callable, Literal, Union, cast
 
 import torch
 from lightning import LightningModule
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.utilities import grad_norm
-from torch import Tensor
+from torch import Tensor, nn
 from torch.optim import SGD
-from torch.optim.lr_scheduler import ConstantLR, SequentialLR, StepLR
+from torch.optim.lr_scheduler import (
+    ConstantLR,
+    LRScheduler,
+    ReduceLROnPlateau,
+    SequentialLR,
+    StepLR,
+)
+from torch.optim.optimizer import Optimizer
 from torch.profiler import record_function
-from torchmetrics import MetricCollection
+from torchmetrics import Metric, MetricCollection
 from torchmetrics.aggregation import MeanMetric
 from torchmetrics.classification import Accuracy
 from torchmetrics.wrappers import FeatureShare
 from torchvision import models
-from typing_extensions import override
+from typing_extensions import TypeAlias, override
 
 from benchmark_ctrs.metrics import certified_radius as cr
 from benchmark_ctrs.models import Architecture, ArchitectureValues
+from benchmark_ctrs.models.cifar_resnet import ResNet
 from benchmark_ctrs.models.cifar_resnet import resnet as cifar_resnet
 from benchmark_ctrs.models.layers import Normalization
 from benchmark_ctrs.models.lenet import LeNet
 from benchmark_ctrs.utilities import check_valid_step_output
 
 if TYPE_CHECKING:
-    from typing import Any
-
     from lightning.pytorch.utilities.types import STEP_OUTPUT
     from tensorboardX import SummaryWriter
-    from torch.optim.optimizer import Optimizer
 
     from benchmark_ctrs.types import CONFIGURE_OPTIMIZERS, Batch, StepOutput
 
@@ -51,7 +58,47 @@ class HParams:
     weight_decay: float
 
 
+OptimizerCallable: TypeAlias = Callable[[Iterable[Any]], Optimizer]
+LRSchedulerCallable: TypeAlias = Callable[
+    [Optimizer],
+    Union[LRScheduler, ReduceLROnPlateau],
+]
+
+
+def warmup_lr_scheduler(
+    optimizer: Optimizer, step_size: int, gamma: float, **kwargs
+) -> LRScheduler:
+    warmup_phase = ConstantLR(optimizer, factor=0.1, total_iters=1)
+    normal_phase = StepLR(optimizer, step_size=step_size, gamma=gamma)
+    return SequentialLR(
+        optimizer, [warmup_phase, normal_phase], milestones=[1], **kwargs
+    )
+
+
 class BaseModule(LightningModule, ABC):
+    optimizer: OptimizerCallable
+    lr_scheduler: LRSchedulerCallable | None
+    automatic_accuracy: bool
+
+    _arch: Architecture
+    _cert_params: cr.Params | None
+    _num_classes: int
+    _mean: list[float]
+    _std: list[float]
+    _grads_log_interval: int
+    _norm: Normalization
+    _raw_model: nn.Module
+    _model: nn.Module
+    _criterion: nn.Module
+
+    _batch_time: Metric
+    _acc_train: MetricCollection
+    _acc_val: MetricCollection
+    _loss_train: Metric
+    _loss_val: Metric
+    _val_cert: MetricCollection | None
+    _predict_cert: cr.CertifiedRadius | None
+
     def __init__(
         self,
         *,
@@ -62,6 +109,8 @@ class BaseModule(LightningModule, ABC):
         cert: cr.Params | None = None,
         arch: ArchitectureValues | None = None,
         default_arch: ArchitectureValues = "resnet50",
+        optimizer: OptimizerCallable | None = None,
+        lr_scheduler: LRSchedulerCallable | bool = True,
         grads_log_interval: int = 0,
     ) -> None:
         super().__init__()
@@ -74,12 +123,44 @@ class BaseModule(LightningModule, ABC):
 
         self._arch = cast(
             "Architecture",
-            Architecture.from_str(arch or default_arch, source="value"),
+            Architecture.from_str(
+                arch or default_arch,
+                source="value",
+            ),
         )
-        self._mean = mean
-        self._std = std
+        self._mean = list(mean)
+        self._std = list(std)
 
-        self.automatic_accuracy: bool = True
+        self.optimizer = (
+            optimizer
+            if optimizer is not None
+            else partial(
+                SGD,
+                lr=self.hparams["learning_rate"],
+                momentum=self.hparams["momentum"],
+                weight_decay=self.hparams["weight_decay"],
+            )
+        )
+
+        default_lr_scheduler = partial(
+            warmup_lr_scheduler
+            if (
+                self._arch.is_resnet
+                and self._arch.resnet_depth >= WARMUP_DEPTH_THRESHOLD
+            )
+            else StepLR,
+            step_size=self.hparams["lr_step"],
+            gamma=self.hparams["lr_decay"],
+        )
+        self.lr_scheduler = (
+            default_lr_scheduler
+            if lr_scheduler is True
+            else lr_scheduler
+            if lr_scheduler is not False
+            else None
+        )
+
+        self.automatic_accuracy = True
         self._acc_train = MetricCollection(
             {
                 "accuracy": Accuracy(task="multiclass", num_classes=self._num_classes),
@@ -159,27 +240,17 @@ class BaseModule(LightningModule, ABC):
 
     @override
     def configure_optimizers(self) -> CONFIGURE_OPTIMIZERS:
-        optimizer = SGD(
-            self.parameters(),
-            lr=self.hparams["learning_rate"],
-            momentum=self.hparams["momentum"],
-            weight_decay=self.hparams["weight_decay"],
-        )
-
-        step_lr = StepLR(optimizer, self.hparams["lr_step"], gamma=0.1)
-        if self._arch.is_resnet and self._arch.resnet_depth >= WARMUP_DEPTH_THRESHOLD:
-            warmup_lr = ConstantLR(optimizer, factor=0.1, total_iters=1)
-            scheduler = SequentialLR(optimizer, [warmup_lr, step_lr], milestones=[1])
-        else:
-            scheduler = step_lr
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": "epoch",
-                "frequency": 1,
-            },
-        }
+        optimizer = self.optimizer(self.parameters())
+        if self.lr_scheduler is not None:
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": self.lr_scheduler(optimizer),
+                    "interval": "epoch",
+                    "frequency": 1,
+                },
+            }
+        return optimizer
 
     @override
     def forward(

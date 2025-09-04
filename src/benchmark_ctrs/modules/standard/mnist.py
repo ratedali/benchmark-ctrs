@@ -8,7 +8,7 @@ from typing_extensions import override
 from benchmark_ctrs.modules import BaseHParams, BaseModule
 
 if TYPE_CHECKING:
-    from benchmark_ctrs.types import CONFIGURE_OPTIMIZERS, StepOutput
+    from benchmark_ctrs.types import CONFIGURE_OPTIMIZERS, Batch, StepOutput
 
 
 class MNISTStandard(BaseModule):
@@ -31,11 +31,11 @@ class MNISTStandard(BaseModule):
         return SGD(self.parameters(), lr=self.hparams["learning_rate"])
 
     @override
-    def training_step(self, batch, *args, **kwargs) -> StepOutput:
+    def training_step(self, batch: Batch, *args, **kwargs) -> StepOutput:
         return self._default_eval_step(batch)
 
     @override
-    def _default_eval_step(self, batch, *args, **kwargs) -> StepOutput:
+    def _default_eval_step(self, batch: Batch, *args, **kwargs) -> StepOutput:
         inputs, targets = batch[:2]
         predictions = self.forward(inputs, add_noise=False)
         loss = self._criterion(predictions, targets)
