@@ -40,16 +40,13 @@ class Normalization(torch.nn.Module):
         self,
         mean: list[float] | None = None,
         sd: list[float] | None = None,
-    ):
+    ) -> None:
         super().__init__()
-        self.mean = torch.nn.Parameter(
-            torch.tensor(mean, dtype=torch.float),
-            requires_grad=False,
-        )
-        self.sd = torch.nn.Parameter(
-            torch.tensor(sd, dtype=torch.float),
-            requires_grad=False,
-        )
+        self.mean: torch.Tensor
+        self.register_buffer("mean", torch.tensor(mean, dtype=torch.float))
 
-    def forward(self, x: torch.Tensor):
+        self.sd: torch.Tensor
+        self.register_buffer("sd", torch.tensor(sd, dtype=torch.float))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return normalize(x, self.mean, self.sd)
