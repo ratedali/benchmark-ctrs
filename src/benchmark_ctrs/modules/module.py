@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from functools import partial
 from itertools import chain
-from typing import TYPE_CHECKING, Any, Callable, Literal, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, Union, cast
 
 import torch
 from lightning import LightningModule
@@ -32,7 +32,6 @@ from typing_extensions import TypeAlias, override
 
 from benchmark_ctrs.metrics import certified_radius as cr
 from benchmark_ctrs.models import Architecture, ArchitectureValues
-from benchmark_ctrs.models.cifar_resnet import ResNet
 from benchmark_ctrs.models.cifar_resnet import resnet as cifar_resnet
 from benchmark_ctrs.models.layers import Normalization
 from benchmark_ctrs.models.lenet import LeNet
