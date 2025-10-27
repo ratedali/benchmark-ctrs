@@ -6,7 +6,7 @@ import time
 from abc import ABC, abstractmethod
 from functools import partial
 from itertools import chain
-from typing import TYPE_CHECKING, Any, Callable, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import torch
 from lightning import LightningModule
@@ -17,7 +17,6 @@ from torch.optim import SGD
 from torch.optim.lr_scheduler import (
     ConstantLR,
     LRScheduler,
-    ReduceLROnPlateau,
     SequentialLR,
     StepLR,
 )
@@ -27,7 +26,7 @@ from torchmetrics.aggregation import MeanMetric
 from torchmetrics.classification import Accuracy
 from torchmetrics.wrappers import FeatureShare
 from torchvision import models
-from typing_extensions import TypeAlias, override
+from typing_extensions import override
 
 from benchmark_ctrs.metrics import certified_radius as cr
 from benchmark_ctrs.models import Architecture, ArchitectureValues
@@ -37,14 +36,20 @@ from benchmark_ctrs.models.lenet import LeNet
 from benchmark_ctrs.utilities import check_valid_step_output
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
-
     from lightning.pytorch.utilities.types import STEP_OUTPUT
-    from tensorboardX import SummaryWriter
     from torch import Tensor
     from torch.optim.optimizer import Optimizer
+    from torch.utils.tensorboard.writer import SummaryWriter
 
-    from benchmark_ctrs.types import CONFIGURE_OPTIMIZERS, Batch, StepOutput
+    from benchmark_ctrs.types import (
+        CONFIGURE_OPTIMIZERS,
+        Batch,
+        Criterion,
+        CriterionCallable,
+        LRSchedulerCallable,
+        OptimizerCallable,
+        StepOutput,
+    )
 
 
 WARMUP_DEPTH_THRESHOLD = 110
@@ -58,12 +63,6 @@ class HParams:
     lr_step: int
     momentum: float
     weight_decay: float
-
-
-OptimizerCallable: TypeAlias = "Callable[[Iterable[Any]], Optimizer]"
-LRSchedulerCallable: TypeAlias = "Callable[[Optimizer], LRScheduler|ReduceLROnPlateau]"
-Criterion: TypeAlias = "Callable[[Tensor, Tensor], Tensor]"
-CriterionCallable: TypeAlias = "Callable[[], Criterion]"
 
 
 def warmup_lr_scheduler(
