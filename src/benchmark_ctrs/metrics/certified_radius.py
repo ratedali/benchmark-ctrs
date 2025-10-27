@@ -16,7 +16,8 @@ if TYPE_CHECKING:
     from typing import Literal
 
     from torch import Tensor
-    from torch.nn import Module
+
+    from benchmark_ctrs.types import Classifier
 
 
 class _Reduction(LightningEnum):
@@ -53,7 +54,7 @@ class CertifiedRadius(Metric):
 
     def __init__(
         self,
-        base_classifier: Module,
+        base_classifier: Classifier,
         params: Params,
         *,
         num_classes: int,

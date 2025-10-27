@@ -1,10 +1,11 @@
 # this file is based on code available publically on
 #   https://github.com/locuslab/smoothing
 # originally written by Jeremy Cohen.
+from __future__ import annotations
 
 import dataclasses
 from math import ceil
-from typing import Literal, NamedTuple, Union, cast, overload
+from typing import TYPE_CHECKING, NamedTuple, cast, overload
 
 import lightning as L
 import numpy as np
@@ -12,8 +13,14 @@ import numpy.typing as npt
 import torch
 from scipy.stats import binomtest, norm
 from statsmodels.stats.proportion import proportion_confint
-from torch import Tensor, nn
 from typing_extensions import TypeAlias, TypeIs
+
+if TYPE_CHECKING:
+    from typing import Literal
+
+    from torch import Tensor
+
+    from benchmark_ctrs.types import Classifier
 
 
 class _ABSTAIN_TYPE: ...
@@ -21,7 +28,7 @@ class _ABSTAIN_TYPE: ...
 
 _ABSTAIN = _ABSTAIN_TYPE()
 
-Prediction: TypeAlias = Union[int, _ABSTAIN_TYPE]
+Prediction: TypeAlias = "int | _ABSTAIN_TYPE"
 
 
 def is_abstain(prediction: Prediction) -> TypeIs[_ABSTAIN_TYPE]:
@@ -58,11 +65,11 @@ class SmoothedClassifier(L.LightningModule):
 
     def __init__(
         self,
-        base_classifier: nn.Module,
+        base_classifier: Classifier,
         num_classes: int,
         sigma: float,
         params: HParams,
-    ):
+    ) -> None:
         """
         :param base_classifier: maps from
             [batch x channel x height x width] to [batch x num_classes]
@@ -222,11 +229,11 @@ class SmoothedClassifier(L.LightningModule):
                 noise = torch.empty_like(batch).cauchy_() * self.sigma
             else:
                 raise NotImplementedError
-            predictions = cast("Tensor", self.base_classifier(batch + noise)).argmax(1)
+            predictions = self.base_classifier(batch + noise).argmax(1)
             counts += predictions.bincount(minlength=self.num_classes)
         return counts
 
-    def _sample_noise_norm(self, x: torch.Tensor, num: int, batch_size) -> torch.Tensor:
+    def _sample_noise_norm(self, x: Tensor, num: int, batch_size) -> Tensor:
         """Sample the base classifier's prediction under noisy corruptions
         of the input x.
 
@@ -253,9 +260,7 @@ class SmoothedClassifier(L.LightningModule):
             batch = x.repeat((this_batch_size, 1, 1, 1))
 
             noise = torch.randn_like(batch) * self.sigma
-            predictions = cast(
-                "Tensor", self.base_classifier(_add_norm(batch, noise))
-            ).argmax(1)
+            predictions = self.base_classifier(_add_norm(batch, noise)).argmax(1)
             counts += predictions.bincount(minlength=self.num_classes)
         return counts
 

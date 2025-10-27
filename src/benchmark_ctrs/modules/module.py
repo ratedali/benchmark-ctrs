@@ -80,6 +80,7 @@ class BaseModule(LightningModule, ABC):
 
     raw_model: nn.Module
     model: nn.Module
+    eval_model: nn.Module
     criterion: Criterion
 
     _arch: Architecture
@@ -201,6 +202,7 @@ class BaseModule(LightningModule, ABC):
         self.criterion = self.__criterion()
         self._norm = Normalization(mean=self._mean, sd=self._std)
         self.model = torch.nn.Sequential(self._norm, self.raw_model)
+        self.eval_model = self.get_eval_model()
 
         self._val_cert = None
         if (
@@ -211,21 +213,21 @@ class BaseModule(LightningModule, ABC):
             self._val_cert = FeatureShare(
                 {
                     "certified_radius/average": cr.CertifiedRadius(
-                        self.model,
+                        self.eval_model,
                         self._cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
                         reduction="mean",
                     ),
                     "certified_radius/best": cr.CertifiedRadius(
-                        self.model,
+                        self.eval_model,
                         self._cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
                         reduction="max",
                     ),
                     "certified_radius/worst": cr.CertifiedRadius(
-                        self.model,
+                        self.eval_model,
                         self._cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
@@ -237,7 +239,7 @@ class BaseModule(LightningModule, ABC):
         self._predict_cert = None
         if stage == "predict" and self._cert_params and self.hparams["sigma"] > 0:
             self._predict_cert = cr.CertifiedRadius(
-                self.model,
+                self.eval_model,
                 self._cert_params,
                 num_classes=self._num_classes,
                 sigma=self.hparams["sigma"],
@@ -258,6 +260,9 @@ class BaseModule(LightningModule, ABC):
             }
         return optimizer
 
+    def get_eval_model(self) -> nn.Module:
+        return self.model
+
     @override
     def forward(
         self, inputs: Tensor, *args: Any, add_noise: bool = True, **kwargs: Any
@@ -266,8 +271,11 @@ class BaseModule(LightningModule, ABC):
         if add_noise and not math.isclose(sigma, 0):
             noises = torch.randn_like(inputs) * sigma
             inputs = torch.clamp(inputs + noises, 0.0, 1.0)
+
+        if self.training:
             return self.model(inputs)
-        return self.model(inputs)
+
+        return self.eval_model(inputs)
 
     @override
     def on_train_start(self) -> None:
@@ -341,7 +349,11 @@ class BaseModule(LightningModule, ABC):
 
     @override
     def on_validation_batch_end(
-        self, outputs: STEP_OUTPUT, batch: Batch, *args: Any, **kwargs: Any
+        self,
+        outputs: STEP_OUTPUT,
+        batch: Batch,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         if not check_valid_step_output(outputs):
             raise ValueError(

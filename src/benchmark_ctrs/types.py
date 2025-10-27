@@ -29,6 +29,7 @@ CONFIGURE_OPTIMIZERS: TypeAlias = """
     | None
 """
 
+Classifier: TypeAlias = "Callable[[Tensor], Tensor]"
 OptimizerCallable: TypeAlias = "Callable[[Iterable[Any]], Optimizer]"
 LRSchedulerCallable: TypeAlias = "Callable[[Optimizer], LRScheduler|ReduceLROnPlateau]"
 Criterion: TypeAlias = "Callable[[Tensor, Tensor], Tensor]"
