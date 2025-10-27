@@ -46,5 +46,5 @@ class CIFARStandard(BaseModule):
     ) -> StepOutput:
         inputs, targets = batch
         predictions = self.forward(inputs, add_noise=False)
-        loss = self._criterion(predictions, targets)
+        loss = self.criterion(predictions, targets)
         return {"loss": loss, "predictions": predictions}

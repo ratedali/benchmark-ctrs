@@ -38,5 +38,5 @@ class MNISTStandard(BaseModule):
     def _default_eval_step(self, batch: Batch, *args, **kwargs) -> StepOutput:
         inputs, targets = batch[:2]
         predictions = self.forward(inputs, add_noise=False)
-        loss = self._criterion(predictions, targets)
+        loss = self.criterion(predictions, targets)
         return {"loss": loss, "predictions": predictions}

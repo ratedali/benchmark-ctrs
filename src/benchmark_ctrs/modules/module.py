@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import dataclasses
+import math
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
 from functools import partial
 from itertools import chain
-from typing import TYPE_CHECKING, Any, Callable, Union, cast
+from typing import TYPE_CHECKING, Any, Callable, cast
 
 import torch
 from lightning import LightningModule
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.utilities import grad_norm
-from torch import Tensor, nn
+from torch import nn
 from torch.optim import SGD
 from torch.optim.lr_scheduler import (
     ConstantLR,
@@ -21,7 +21,6 @@ from torch.optim.lr_scheduler import (
     SequentialLR,
     StepLR,
 )
-from torch.optim.optimizer import Optimizer
 from torch.profiler import record_function
 from torchmetrics import Metric, MetricCollection
 from torchmetrics.aggregation import MeanMetric
@@ -38,8 +37,12 @@ from benchmark_ctrs.models.lenet import LeNet
 from benchmark_ctrs.utilities import check_valid_step_output
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from lightning.pytorch.utilities.types import STEP_OUTPUT
     from tensorboardX import SummaryWriter
+    from torch import Tensor
+    from torch.optim.optimizer import Optimizer
 
     from benchmark_ctrs.types import CONFIGURE_OPTIMIZERS, Batch, StepOutput
 
@@ -57,11 +60,10 @@ class HParams:
     weight_decay: float
 
 
-OptimizerCallable: TypeAlias = Callable[[Iterable[Any]], Optimizer]
-LRSchedulerCallable: TypeAlias = Callable[
-    [Optimizer],
-    Union[LRScheduler, ReduceLROnPlateau],
-]
+OptimizerCallable: TypeAlias = "Callable[[Iterable[Any]], Optimizer]"
+LRSchedulerCallable: TypeAlias = "Callable[[Optimizer], LRScheduler|ReduceLROnPlateau]"
+Criterion: TypeAlias = "Callable[[Tensor, Tensor], Tensor]"
+CriterionCallable: TypeAlias = "Callable[[], Criterion]"
 
 
 def warmup_lr_scheduler(
@@ -75,9 +77,11 @@ def warmup_lr_scheduler(
 
 
 class BaseModule(LightningModule, ABC):
-    optimizer: OptimizerCallable
-    lr_scheduler: LRSchedulerCallable | None
     automatic_accuracy: bool
+
+    raw_model: nn.Module
+    model: nn.Module
+    criterion: Criterion
 
     _arch: Architecture
     _cert_params: cr.Params | None
@@ -86,9 +90,6 @@ class BaseModule(LightningModule, ABC):
     _std: list[float]
     _grads_log_interval: int
     _norm: Normalization
-    _raw_model: nn.Module
-    _model: nn.Module
-    _criterion: nn.Module
 
     _batch_time: Metric
     _acc_train: MetricCollection
@@ -110,6 +111,7 @@ class BaseModule(LightningModule, ABC):
         default_arch: ArchitectureValues = "resnet50",
         optimizer: OptimizerCallable | None = None,
         lr_scheduler: LRSchedulerCallable | bool = True,
+        criterion: CriterionCallable | None = None,
         grads_log_interval: int = 0,
     ) -> None:
         super().__init__()
@@ -130,7 +132,7 @@ class BaseModule(LightningModule, ABC):
         self._mean = list(mean)
         self._std = list(std)
 
-        self.optimizer = (
+        self.__optimizer = (
             optimizer
             if optimizer is not None
             else partial(
@@ -151,12 +153,18 @@ class BaseModule(LightningModule, ABC):
             step_size=self.hparams["lr_step"],
             gamma=self.hparams["lr_decay"],
         )
-        self.lr_scheduler = (
+        self.__lr_scheduler = (
             default_lr_scheduler
             if lr_scheduler is True
             else lr_scheduler
             if lr_scheduler is not False
             else None
+        )
+
+        self.__criterion: CriterionCallable = (
+            criterion
+            if criterion is not None
+            else partial(nn.CrossEntropyLoss, reduction="mean")
         )
 
         self.automatic_accuracy = True
@@ -175,14 +183,14 @@ class BaseModule(LightningModule, ABC):
     @override
     def setup(self, stage: str) -> None:
         if self._arch == Architecture.LeNet:
-            self._raw_model = LeNet()
+            self.raw_model = LeNet()
         elif self._arch == Architecture.ResNet50:
-            self._raw_model = models.resnet50(
+            self.raw_model = models.resnet50(
                 weights=None,
                 num_classes=self._num_classes,
             )
         elif self._arch.is_cifarresnet:
-            self._raw_model = cifar_resnet(
+            self.raw_model = cifar_resnet(
                 depth=self._arch.resnet_depth, num_classes=self._num_classes
             )
         else:
@@ -191,9 +199,9 @@ class BaseModule(LightningModule, ABC):
                 f"Possible values are: {', '.join(Architecture._member_names_)}"
             )
 
-        self._criterion = torch.nn.CrossEntropyLoss()
+        self.criterion = self.__criterion()
         self._norm = Normalization(mean=self._mean, sd=self._std)
-        self._model = torch.nn.Sequential(self._norm, self._raw_model)
+        self.model = torch.nn.Sequential(self._norm, self.raw_model)
 
         self._val_cert = None
         if (
@@ -204,21 +212,21 @@ class BaseModule(LightningModule, ABC):
             self._val_cert = FeatureShare(
                 {
                     "certified_radius/average": cr.CertifiedRadius(
-                        self._model,
+                        self.model,
                         self._cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
                         reduction="mean",
                     ),
                     "certified_radius/best": cr.CertifiedRadius(
-                        self._model,
+                        self.model,
                         self._cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
                         reduction="max",
                     ),
                     "certified_radius/worst": cr.CertifiedRadius(
-                        self._model,
+                        self.model,
                         self._cert_params,
                         num_classes=self._num_classes,
                         sigma=self.hparams["sigma"],
@@ -230,7 +238,7 @@ class BaseModule(LightningModule, ABC):
         self._predict_cert = None
         if stage == "predict" and self._cert_params and self.hparams["sigma"] > 0:
             self._predict_cert = cr.CertifiedRadius(
-                self._model,
+                self.model,
                 self._cert_params,
                 num_classes=self._num_classes,
                 sigma=self.hparams["sigma"],
@@ -239,12 +247,12 @@ class BaseModule(LightningModule, ABC):
 
     @override
     def configure_optimizers(self) -> CONFIGURE_OPTIMIZERS:
-        optimizer = self.optimizer(self.parameters())
-        if self.lr_scheduler is not None:
+        optimizer = self.__optimizer(self.parameters())
+        if self.__lr_scheduler is not None:
             return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
-                    "scheduler": self.lr_scheduler(optimizer),
+                    "scheduler": self.__lr_scheduler(optimizer),
                     "interval": "epoch",
                     "frequency": 1,
                 },
@@ -256,10 +264,11 @@ class BaseModule(LightningModule, ABC):
         self, inputs: Tensor, *args: Any, add_noise: bool = True, **kwargs: Any
     ) -> Tensor:
         sigma = self.hparams["sigma"]
-        if add_noise and sigma > 0:
+        if add_noise and not math.isclose(sigma, 0):
             noises = torch.randn_like(inputs) * sigma
-            return self._model(inputs + noises)
-        return self._model(inputs)
+            inputs = torch.clamp(inputs + noises, 0.0, 1.0)
+            return self.model(inputs)
+        return self.model(inputs)
 
     @override
     def on_train_start(self) -> None:
@@ -397,7 +406,7 @@ class BaseModule(LightningModule, ABC):
         with record_function("sampling"):
             predictions = self.forward(inputs, add_noise=add_noise)
         with record_function("classification_loss"):
-            loss = self._criterion(predictions, targets)
+            loss = self.criterion(predictions, targets)
         return {"loss": loss, "predictions": predictions}
 
     def log_grad_norms(self, norm_type: float | str = 2) -> None:
@@ -410,7 +419,7 @@ class BaseModule(LightningModule, ABC):
         optimization.
 
         """
-        norms = grad_norm(self._model, norm_type=norm_type)
+        norms = grad_norm(self.model, norm_type=norm_type)
         self.log(
             "backprop/grad_l2_norm_total",
             norms.pop("grad_2.0_norm_total", 0.0),
