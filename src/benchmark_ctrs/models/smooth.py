@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import dataclasses
 from math import ceil
-from typing import TYPE_CHECKING, NamedTuple, cast, overload
+from typing import TYPE_CHECKING, NamedTuple, Union, cast, overload
 
 import lightning as L
 import numpy as np
@@ -13,7 +13,7 @@ import numpy.typing as npt
 import torch
 from scipy.stats import binomtest, norm
 from statsmodels.stats.proportion import proportion_confint
-from typing_extensions import TypeAlias, TypeIs
+from typing_extensions import TypeIs
 
 if TYPE_CHECKING:
     from typing import Literal
@@ -28,7 +28,7 @@ class _ABSTAIN_TYPE: ...
 
 _ABSTAIN = _ABSTAIN_TYPE()
 
-Prediction: TypeAlias = "int | _ABSTAIN_TYPE"
+Prediction = Union[int, _ABSTAIN_TYPE]
 
 
 def is_abstain(prediction: Prediction) -> TypeIs[_ABSTAIN_TYPE]:
