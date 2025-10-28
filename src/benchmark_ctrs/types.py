@@ -11,9 +11,9 @@ from lightning.pytorch.utilities.types import (
 from torch import Tensor
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
-from typing_extensions import NotRequired, TypeAlias
+from typing_extensions import NotRequired
 
-CONFIGURE_OPTIMIZERS: TypeAlias = Union[
+CONFIGURE_OPTIMIZERS = Union[
     Optimizer,
     Sequence[Optimizer],
     tuple[
@@ -33,15 +33,13 @@ CONFIGURE_OPTIMIZERS: TypeAlias = Union[
     None,
 ]
 
-Classifier: TypeAlias = Callable[[Tensor], Tensor]
-OptimizerCallable: TypeAlias = Callable[[Iterable[Any]], Optimizer]
-LRSchedulerCallable: TypeAlias = Callable[
-    [Optimizer], Union[LRScheduler, ReduceLROnPlateau]
-]
-Criterion: TypeAlias = Callable[[Tensor, Tensor], Tensor]
-CriterionCallable: TypeAlias = Callable[[], Criterion]
+Classifier = Callable[[Tensor], Tensor]
+OptimizerCallable = Callable[[Iterable[Any]], Optimizer]
+LRSchedulerCallable = Callable[[Optimizer], Union[LRScheduler, ReduceLROnPlateau]]
+Criterion = Callable[[Tensor, Tensor], Tensor]
+CriterionCallable = Callable[[], Criterion]
 
-Batch: TypeAlias = tuple[Tensor, ...]
+Batch = tuple[Tensor, ...]
 
 
 class StepOutput(TypedDict):
