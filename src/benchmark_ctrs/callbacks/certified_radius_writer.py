@@ -1,30 +1,24 @@
-from __future__ import annotations
-
+from collections.abc import Sequence
 from csv import DictWriter
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final
+from typing import Any, Final, Optional
 
+import lightning as L
 from lightning.pytorch.callbacks import BasePredictionWriter
-from lightning.pytorch.core import LightningModule
-from lightning.pytorch.trainer import Trainer
 from typing_extensions import override
 
-from benchmark_ctrs.modules.module import BaseModule
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    from lightning import LightningModule, Trainer
-
-    from benchmark_ctrs.metrics.certified_radius import CertificationResult
-    from benchmark_ctrs.modules.module import Batch
-
+from benchmark_ctrs.metrics.certified_radius import CertificationResult
+from benchmark_ctrs.modules.module import BaseModule, Batch
 
 FIELDS: Final = ("idx", "label", "predict", "radius", "correct")
 
 
 class CertifiedRadiusWriter(BasePredictionWriter):
-    def __init__(self, outdir: str | None = None, filename: str = "cert.csv") -> None:
+    def __init__(
+        self,
+        outdir: Optional[str] = None,
+        filename: str = "cert.csv",
+    ) -> None:
         super().__init__(write_interval="batch")
         self._outdir = Path(outdir) if outdir else None
         if self._outdir is not None and not self._outdir.is_dir():
@@ -34,7 +28,7 @@ class CertifiedRadiusWriter(BasePredictionWriter):
 
     @override
     def on_predict_epoch_start(
-        self, trainer: Trainer, pl_module: LightningModule
+        self, trainer: L.Trainer, pl_module: L.LightningModule
     ) -> None:
         if not isinstance(pl_module, BaseModule):
             raise TypeError(
@@ -49,10 +43,10 @@ class CertifiedRadiusWriter(BasePredictionWriter):
     @override
     def write_on_batch_end(
         self,
-        trainer: Trainer,
-        pl_module: LightningModule,
-        prediction: CertificationResult | None,
-        batch_indices: Sequence[int] | None,
+        trainer: L.Trainer,
+        pl_module: L.LightningModule,
+        prediction: Optional[CertificationResult],
+        batch_indices: Optional[Sequence[int]],
         batch: Batch,
         *args: Any,
         **kwargs: Any,
@@ -93,7 +87,7 @@ class CertifiedRadiusWriter(BasePredictionWriter):
                     for i in indices
                 )
 
-    def _resolve_output_path(self, trainer: Trainer) -> Path:
+    def _resolve_output_path(self, trainer: L.Trainer) -> Path:
         if self._outdir:
             return self._outdir / self._filename
 

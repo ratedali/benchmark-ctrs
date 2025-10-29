@@ -1,23 +1,16 @@
-from __future__ import annotations
-
 import dataclasses
-from typing import TYPE_CHECKING, Any, ClassVar, NamedTuple, cast
+from typing import Any, ClassVar, Literal, NamedTuple, Union, cast
 
 import numpy as np
 import torch
 from lightning.pytorch.utilities import LightningEnum
+from torch import Tensor
 from torchmetrics import Metric
 from torchmetrics.utilities import dim_zero_cat
 from torchmetrics.utilities.exceptions import TorchMetricsUserError
 
 from benchmark_ctrs.models import smooth
-
-if TYPE_CHECKING:
-    from typing import Literal
-
-    from torch import Tensor
-
-    from benchmark_ctrs.types import Classifier
+from benchmark_ctrs.types import Classifier
 
 
 class _Reduction(LightningEnum):
@@ -31,7 +24,7 @@ class _Reduction(LightningEnum):
 class Params(smooth.HParams):
     start: int = 0
     skip: int = 1
-    max_: int | None = None
+    max_: Union[int, Literal[False]] = False
 
 
 class CertificationResult(NamedTuple):
@@ -46,7 +39,7 @@ class CertifiedRadius(Metric):
     plot_lower_bound = 0.0
     feature_network: ClassVar = "_smooth"
 
-    _radii: Tensor | list[Tensor]
+    _radii: Union[Tensor, list[Tensor]]
     _indices: list[Tensor]
     _predictions: list[Tensor]
     _total: Tensor
@@ -147,7 +140,7 @@ class CertifiedRadius(Metric):
                 self._radii = torch.min(_radii, radii[correct].min())
 
     @torch.inference_mode()
-    def compute(self) -> Tensor | CertificationResult:
+    def compute(self) -> Union[Tensor, CertificationResult]:
         """Compute the certified radius metric value
 
         Returns:

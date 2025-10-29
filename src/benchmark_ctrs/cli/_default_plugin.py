@@ -1,16 +1,10 @@
-from __future__ import annotations
+from collections.abc import Sequence
 
-from typing import TYPE_CHECKING
+import lightning as L
 
 from benchmark_ctrs import plugins
-
-if TYPE_CHECKING:
-    from collections.abc import Sequence
-
-    import lightning as L
-
-    from benchmark_ctrs.datasets.module import BaseDataModule
-    from benchmark_ctrs.modules.module import BaseModule
+from benchmark_ctrs.datasets.module import BaseDataModule
+from benchmark_ctrs.modules.module import BaseModule
 
 
 @plugins.hookimpl

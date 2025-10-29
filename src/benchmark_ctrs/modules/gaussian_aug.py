@@ -1,14 +1,10 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from typing_extensions import override
 
 from benchmark_ctrs.modules import BaseHParams, BaseModule
-
-if TYPE_CHECKING:
-    from benchmark_ctrs.types import Batch, StepOutput
+from benchmark_ctrs.types import Batch, StepOutput
 
 
 @dataclass(frozen=True)

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Any, ClassVar, Final
 
 from torch.utils.data import random_split
@@ -17,7 +15,7 @@ class CIFAR10(BaseDataModule):
 
     default_arch: ClassVar = Architecture.CIFARResNet110
 
-    def __init__(self, *args: Any, batch_size: int = 400, **kwargs: Any):
+    def __init__(self, *args: Any, batch_size: int = 400, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs, batch_size=batch_size)
         self.name = "cifar10"
 

@@ -19,9 +19,9 @@ license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
     "typing-extensions",
-    "torch==2.6.0",
-    "torchvision==0.21.0",
-    "lightning[pytorch-extra]",
+    "torch",
+    "torchvision",
+    "lightning[extra]",
     "torchmetrics",  
     "numpy",
     "scipy",

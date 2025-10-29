@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import logging
 from pathlib import Path
 
@@ -8,7 +6,6 @@ from typing_extensions import override
 
 import benchmark_ctrs
 from benchmark_ctrs.cli import plugins
-from benchmark_ctrs.datasets.imagenet import ImageNet
 from benchmark_ctrs.datasets.module import BaseDataModule
 from benchmark_ctrs.modules.module import BaseModule
 

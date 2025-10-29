@@ -1,18 +1,17 @@
-from __future__ import annotations
-
 import dataclasses
 import math
 import time
 from abc import ABC, abstractmethod
 from functools import partial
 from itertools import chain
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, Literal, Optional, Union, cast
 
 import torch
 from lightning import LightningModule
 from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.utilities import grad_norm
-from torch import nn
+from lightning.pytorch.utilities.types import STEP_OUTPUT
+from torch import Tensor, nn
 from torch.optim import SGD
 from torch.optim.lr_scheduler import (
     ConstantLR,
@@ -20,7 +19,9 @@ from torch.optim.lr_scheduler import (
     SequentialLR,
     StepLR,
 )
+from torch.optim.optimizer import Optimizer
 from torch.profiler import record_function
+from torch.utils.tensorboard.writer import SummaryWriter
 from torchmetrics import Metric, MetricCollection
 from torchmetrics.aggregation import MeanMetric
 from torchmetrics.classification import Accuracy
@@ -33,24 +34,16 @@ from benchmark_ctrs.models import Architecture, ArchitectureValues
 from benchmark_ctrs.models.cifar_resnet import resnet as cifar_resnet
 from benchmark_ctrs.models.layers import Normalization
 from benchmark_ctrs.models.lenet import LeNet
+from benchmark_ctrs.types import (
+    CONFIGURE_OPTIMIZERS,
+    Batch,
+    Criterion,
+    CriterionCallable,
+    LRSchedulerCallable,
+    OptimizerCallable,
+    StepOutput,
+)
 from benchmark_ctrs.utilities import check_valid_step_output
-
-if TYPE_CHECKING:
-    from lightning.pytorch.utilities.types import STEP_OUTPUT
-    from torch import Tensor
-    from torch.optim.optimizer import Optimizer
-    from torch.utils.tensorboard.writer import SummaryWriter
-
-    from benchmark_ctrs.types import (
-        CONFIGURE_OPTIMIZERS,
-        Batch,
-        Criterion,
-        CriterionCallable,
-        LRSchedulerCallable,
-        OptimizerCallable,
-        StepOutput,
-    )
-
 
 WARMUP_DEPTH_THRESHOLD = 110
 
@@ -84,7 +77,7 @@ class BaseModule(LightningModule, ABC):
     criterion: Criterion
 
     _arch: Architecture
-    _cert_params: cr.Params | None
+    _cert_params: Union[cr.Params, Literal[False]]
     _num_classes: int
     _mean: list[float]
     _std: list[float]
@@ -96,8 +89,8 @@ class BaseModule(LightningModule, ABC):
     _acc_val: MetricCollection
     _loss_train: Metric
     _loss_val: Metric
-    _val_cert: MetricCollection | None
-    _predict_cert: cr.CertifiedRadius | None
+    _val_cert: Optional[MetricCollection]
+    _predict_cert: Optional[cr.CertifiedRadius]
 
     def __init__(
         self,
@@ -106,12 +99,12 @@ class BaseModule(LightningModule, ABC):
         std: list[float],
         mean: list[float],
         params: HParams,
-        cert: cr.Params | None = None,
-        arch: ArchitectureValues | None = None,
+        cert: Union[cr.Params, Literal[False]] = False,
+        arch: Optional[ArchitectureValues] = None,
         default_arch: ArchitectureValues = "resnet50",
-        optimizer: OptimizerCallable | None = None,
-        lr_scheduler: LRSchedulerCallable | bool = True,
-        criterion: CriterionCallable | None = None,
+        optimizer: Optional[OptimizerCallable] = None,
+        lr_scheduler: Union[LRSchedulerCallable, bool] = True,
+        criterion: Optional[CriterionCallable] = None,
         grads_log_interval: int = 0,
     ) -> None:
         super().__init__()
@@ -132,7 +125,7 @@ class BaseModule(LightningModule, ABC):
         self._mean = list(mean)
         self._std = list(std)
 
-        self.__optimizer = (
+        self.__optimizer: OptimizerCallable = (
             optimizer
             if optimizer is not None
             else partial(
@@ -153,7 +146,7 @@ class BaseModule(LightningModule, ABC):
             step_size=self.hparams["lr_step"],
             gamma=self.hparams["lr_decay"],
         )
-        self.__lr_scheduler = (
+        self.__lr_scheduler: Optional[LRSchedulerCallable] = (
             default_lr_scheduler
             if lr_scheduler is True
             else lr_scheduler
@@ -207,7 +200,7 @@ class BaseModule(LightningModule, ABC):
         self._val_cert = None
         if (
             stage in {"fit", "validate"}
-            and self._cert_params is not None
+            and self._cert_params
             and self.hparams["sigma"] > 0
         ):
             self._val_cert = FeatureShare(
@@ -298,7 +291,7 @@ class BaseModule(LightningModule, ABC):
             self.logger.log_hyperparams(dict(self.hparams), metrics)
 
     @override
-    def on_train_batch_start(self, *args: Any, **kwargs: Any) -> int | None:
+    def on_train_batch_start(self, *args: Any, **kwargs: Any) -> Optional[int]:
         self._batch_start = time.perf_counter()
 
     @override
@@ -401,7 +394,7 @@ class BaseModule(LightningModule, ABC):
     @override
     def predict_step(
         self, batch: Batch, *args: Any, **kwargs: Any
-    ) -> cr.CertificationResult | None:
+    ) -> Optional[cr.CertificationResult]:
         if self._predict_cert:
             inputs, targets, *_ = batch
             self._predict_cert.update(inputs, targets)
@@ -420,7 +413,7 @@ class BaseModule(LightningModule, ABC):
             loss = self.criterion(predictions, targets)
         return {"loss": loss, "predictions": predictions}
 
-    def log_grad_norms(self, norm_type: float | str = 2) -> None:
+    def log_grad_norms(self, norm_type: Union[float, str] = 2) -> None:
         """Utility to compute and log grad norms.
 
         It gets called in the before_optimizer_step hook,

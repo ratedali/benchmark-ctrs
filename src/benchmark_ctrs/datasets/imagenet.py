@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Any, ClassVar, Final
 
 from torch.utils.data import random_split
@@ -24,7 +22,7 @@ class ImageNet(BaseDataModule):
 
     default_arch: ClassVar = Architecture.ResNet50
 
-    def __init__(self, *args: Any, batch_size: int = 64, **kwargs: Any):
+    def __init__(self, *args: Any, batch_size: int = 64, **kwargs: Any) -> None:
         super().__init__(*args, batch_size=batch_size, **kwargs)
         self.name = "imagenet"
         self.__train_transforms = Compose(

@@ -1,7 +1,6 @@
 # Based on code publicly available at
 # https://raw.githubusercontent.com/bearpaw/pytorch-classification/master/models/cifar/resnet.py
 # by Wei Yang
-from __future__ import annotations
 
 import math
 

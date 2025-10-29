@@ -1,38 +1,33 @@
-from __future__ import annotations
+from collections.abc import Sequence
 
-from typing import TYPE_CHECKING
-
+import lightning as L
 import pluggy
 
-if TYPE_CHECKING:
-    from collections.abc import Sequence
+from benchmark_ctrs.datasets.module import BaseDataModule
+from benchmark_ctrs.modules.module import BaseModule
 
-    import lightning as L
 
-    from benchmark_ctrs.datasets.module import BaseDataModule
-    from benchmark_ctrs.modules.module import BaseModule
+class HookType:
+    @staticmethod
+    def register_callbacks() -> Sequence[type[L.Callback]]:
+        """
+        Return all lightning callback types that should be accessible to the CLI
+        """
+        ...
 
-    class HookType:
-        @staticmethod
-        def register_callbacks() -> Sequence[type[L.Callback]]:
-            """
-            Return all lightning callback types that should be accessible to the CLI
-            """
-            ...
+    @staticmethod
+    def register_data_modules() -> Sequence[type[BaseDataModule]]:
+        """
+        Return all data module types that should be accessible to the CLI
+        """
+        ...
 
-        @staticmethod
-        def register_data_modules() -> Sequence[type[BaseDataModule]]:
-            """
-            Return all data module types that should be accessible to the CLI
-            """
-            ...
-
-        @staticmethod
-        def register_models() -> Sequence[type[BaseModule]]:
-            """
-            Return all lightning module types that should be accessible to the CLI
-            """
-            ...
+    @staticmethod
+    def register_models() -> Sequence[type[BaseModule]]:
+        """
+        Return all lightning module types that should be accessible to the CLI
+        """
+        ...
 
 
 hookspec = pluggy.HookspecMarker("benchmark_ctrs")

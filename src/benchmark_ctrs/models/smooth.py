@@ -1,11 +1,10 @@
 # this file is based on code available publically on
 #   https://github.com/locuslab/smoothing
 # originally written by Jeremy Cohen.
-from __future__ import annotations
 
 import dataclasses
 from math import ceil
-from typing import TYPE_CHECKING, NamedTuple, Union, cast, overload
+from typing import Literal, NamedTuple, Union, cast, overload
 
 import lightning as L
 import numpy as np
@@ -13,14 +12,10 @@ import numpy.typing as npt
 import torch
 from scipy.stats import binomtest, norm
 from statsmodels.stats.proportion import proportion_confint
+from torch import Tensor
 from typing_extensions import TypeIs
 
-if TYPE_CHECKING:
-    from typing import Literal
-
-    from torch import Tensor
-
-    from benchmark_ctrs.types import Classifier
+from benchmark_ctrs.types import Classifier
 
 
 class _ABSTAIN_TYPE: ...

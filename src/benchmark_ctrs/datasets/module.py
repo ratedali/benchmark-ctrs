@@ -1,43 +1,37 @@
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from collections.abc import Sized
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import Any, ClassVar, Optional
 
 import lightning as L
+from lightning.pytorch.utilities.types import EVAL_DATALOADERS, TRAIN_DATALOADERS
 from torch.utils.data import DataLoader, Dataset
 from typing_extensions import override
 
-if TYPE_CHECKING:
-    from typing import Any
-
-    from lightning.pytorch.utilities.types import EVAL_DATALOADERS, TRAIN_DATALOADERS
-
-    from benchmark_ctrs.models import Architecture
+from benchmark_ctrs.models import Architecture
 
 
 class BaseDataModule(L.LightningDataModule, ABC):
     __default_cache_dir: ClassVar = Path("datasets_cache")
 
-    default_arch: ClassVar[Architecture | None] = None
+    default_arch: ClassVar[Optional[Architecture]] = None
 
     def __init__(
         self,
         *,
         batch_size: int,
         workers: int = 4,
-        cache_dir: Path | None = None,
+        cache_dir: Optional[Path] = None,
         with_ids: bool = False,
     ):
         super().__init__()
         self._cache_dir = cache_dir or BaseDataModule.__default_cache_dir
         self.save_hyperparameters(ignore="cache_dir")
 
-        self._train: Dataset | None = None
-        self._val: Dataset | None = None
-        self._test: Dataset | None = None
-        self._predict: Dataset | None = None
+        self._train: Optional[Dataset] = None
+        self._val: Optional[Dataset] = None
+        self._test: Optional[Dataset] = None
+        self._predict: Optional[Dataset] = None
 
     @property
     @abstractmethod

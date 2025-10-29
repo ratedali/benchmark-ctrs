@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import Any, ClassVar, Final
 
 from torch.utils.data import random_split
