@@ -127,4 +127,4 @@ select = [
     # mccabe complexity
     "C90",
 ]
-ignore = ["COM812", "TRY003", "PLR0913", "PLR1714"]
+ignore = ["COM812", "TRY003", "PLR0913", "PLR1714", "FA100", "TC002"]
