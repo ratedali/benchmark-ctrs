@@ -195,12 +195,12 @@ class BaseModule(LightningModule, ABC):
         self.criterion = self.__criterion()
         self._norm = Normalization(mean=self._mean, sd=self._std)
         self.model = torch.nn.Sequential(self._norm, self.raw_model)
-        self.eval_model = self.get_eval_model()
+        self.eval_model = self.get_eval_model(self.model)
 
         self._val_cert = None
         if (
             stage in {"fit", "validate"}
-            and self._cert_params
+            and self._cert_params is not False
             and self.hparams["sigma"] > 0
         ):
             self._val_cert = FeatureShare(
@@ -230,7 +230,11 @@ class BaseModule(LightningModule, ABC):
             )
 
         self._predict_cert = None
-        if stage == "predict" and self._cert_params and self.hparams["sigma"] > 0:
+        if (
+            stage == "predict"
+            and self._cert_params is not False
+            and self.hparams["sigma"] > 0
+        ):
             self._predict_cert = cr.CertifiedRadius(
                 self.eval_model,
                 self._cert_params,
@@ -253,8 +257,8 @@ class BaseModule(LightningModule, ABC):
             }
         return optimizer
 
-    def get_eval_model(self) -> nn.Module:
-        return self.model
+    def get_eval_model(self, model: nn.Module) -> nn.Module:
+        return model
 
     @override
     def forward(

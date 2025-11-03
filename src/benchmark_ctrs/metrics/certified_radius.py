@@ -66,7 +66,7 @@ class CertifiedRadius(Metric):
         self._reduction = reduction
         self._start = params.start
         self._skip = params.skip
-        self._max = params.max_
+        self._max: Union[int, Literal[False]] = params.max_
         self._smooth = smooth.SmoothedClassifier(
             base_classifier,
             num_classes=num_classes,
@@ -101,7 +101,7 @@ class CertifiedRadius(Metric):
     def update(self, inputs: Tensor, targets: Tensor) -> None:
         indices = torch.arange(
             start=self._start,
-            end=self._max if self._max is not None else inputs.size(0),
+            end=self._max if self._max is not False else inputs.size(0),
             step=self._skip,
             device=self.device,
             dtype=torch.long,
