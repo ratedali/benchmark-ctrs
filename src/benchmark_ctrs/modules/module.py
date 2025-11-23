@@ -4,7 +4,7 @@ import time
 from abc import ABC, abstractmethod
 from functools import partial
 from itertools import chain
-from typing import Any, Literal, Optional, Union, cast
+from typing import Any, Literal, Optional, TypedDict, Union, cast
 
 import torch
 from lightning import LightningModule
@@ -27,7 +27,7 @@ from torchmetrics.aggregation import MeanMetric
 from torchmetrics.classification import Accuracy
 from torchmetrics.wrappers import FeatureShare
 from torchvision import models
-from typing_extensions import override
+from typing_extensions import NotRequired, override
 
 from benchmark_ctrs.metrics import certified_radius as cr
 from benchmark_ctrs.models import Architecture, ArchitectureValues
@@ -46,6 +46,11 @@ from benchmark_ctrs.types import (
 from benchmark_ctrs.utilities import check_valid_step_output
 
 WARMUP_DEPTH_THRESHOLD = 110
+
+
+class PredictionResult(TypedDict):
+    certification: NotRequired[cr.CertificationResult]
+    clean: Tensor
 
 
 @dataclasses.dataclass(frozen=True)
@@ -393,19 +398,20 @@ class BaseModule(LightningModule, ABC):
 
     @override
     def test_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput:
-        return self._default_eval_step(batch, add_noise=True)
+        return self._default_eval_step(batch, add_noise=False)
 
     @override
-    def predict_step(
-        self, batch: Batch, *args: Any, **kwargs: Any
-    ) -> Optional[cr.CertificationResult]:
+    def predict_step(self, batch: Batch, *args: Any, **kwargs: Any) -> PredictionResult:
+        inputs, targets, *_ = batch
+        result: PredictionResult = {
+            "clean": self.forward(inputs, add_noise=False),
+        }
         if self._predict_cert:
-            inputs, targets, *_ = batch
             self._predict_cert.update(inputs, targets)
-            result = cast("cr.CertificationResult", self._predict_cert.compute())
+            cert = cast("cr.CertificationResult", self._predict_cert.compute())
             self._predict_cert.reset()
-            return result
-        return None
+            result["certification"] = cert
+        return result
 
     def _default_eval_step(
         self, batch: Batch, *, add_noise: bool = False
