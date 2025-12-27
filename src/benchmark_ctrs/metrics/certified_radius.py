@@ -9,8 +9,7 @@ from torchmetrics import Metric
 from torchmetrics.utilities import dim_zero_cat
 from torchmetrics.utilities.exceptions import TorchMetricsUserError
 
-from benchmark_ctrs.models import smooth
-from benchmark_ctrs.types import Classifier
+from benchmark_ctrs.certification import CertificationMethod, is_abstain
 
 
 class _Reduction(LightningEnum):
@@ -21,7 +20,9 @@ class _Reduction(LightningEnum):
 
 
 @dataclasses.dataclass(frozen=True)
-class Params(smooth.HParams):
+class Params:
+    sigma: float
+    alpha: float = 0.001
     start: int = 0
     skip: int = 1
     max_: Union[int, Literal[False]] = False
@@ -37,21 +38,22 @@ class CertifiedRadius(Metric):
     higher_is_better = True
     is_differentiable = False
     plot_lower_bound = 0.0
-    feature_network: ClassVar = "_smooth"
+    feature_network: ClassVar = "_model"
 
     _radii: Union[Tensor, list[Tensor]]
     _indices: list[Tensor]
     _predictions: list[Tensor]
     _total: Tensor
-    _smooth: smooth.SmoothedClassifier
+    _model: torch.nn.Module
+    _certifier: CertificationMethod
 
     def __init__(
         self,
-        base_classifier: Classifier,
+        model: torch.nn.Module,
+        certifier: CertificationMethod,
         params: Params,
         *,
         num_classes: int,
-        sigma: float,
         reduction: Literal["mean", "max", "min", "none"] = "mean",
         **kwargs: Any,
     ) -> None:
@@ -62,17 +64,16 @@ class CertifiedRadius(Metric):
                 f"Unknown reduction mode '{reduction}'. "
                 f"Supported values: {[x.value for x in _Reduction]}"
             )
-
-        self._reduction = reduction
+        self._num_classes = num_classes
+        self._sigma = params.sigma
+        self._alpha = params.alpha
         self._start = params.start
         self._skip = params.skip
         self._max: Union[int, Literal[False]] = params.max_
-        self._smooth = smooth.SmoothedClassifier(
-            base_classifier,
-            num_classes=num_classes,
-            sigma=sigma,
-            params=params,
-        )
+        self._model = model
+        self._certifier = certifier
+        self._reduction = reduction
+
         if self._reduction == "none":
             self.add_state("_radii", default=[], dist_reduce_fx="cat")
             self.add_state("_predictions", default=[], dist_reduce_fx="cat")
@@ -107,16 +108,22 @@ class CertifiedRadius(Metric):
             dtype=torch.long,
         )
 
-        certs = [self._smooth.forward(x, certify=True) for x in inputs[indices]]
+        certs = self._certifier.certify_batch(
+            self._model,
+            data=(inputs, targets),
+            sigma=self._sigma,
+            alpha=self._alpha,
+            num_classes=self._num_classes,
+        )
         radii = np.fromiter(
-            iter=(cert.certified_radius for cert in certs),
+            iter=(cert.radius for cert in certs),
             dtype=float,
         )
         radii = torch.from_numpy(radii).to(self.device)
 
         predictions = np.fromiter(
             iter=(
-                cert.prediction if not smooth.is_abstain(cert.prediction) else -1
+                cert.prediction if not is_abstain(cert.prediction) else -1
                 for cert in certs
             ),
             dtype=np.long,

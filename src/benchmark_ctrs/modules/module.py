@@ -1,7 +1,7 @@
 import dataclasses
-import math
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from functools import partial
 from itertools import chain
 from typing import Any, Literal, Optional, TypedDict, Union, cast
@@ -29,6 +29,8 @@ from torchmetrics.wrappers import FeatureShare
 from torchvision import models
 from typing_extensions import NotRequired, override
 
+from benchmark_ctrs.certification import CertificationMethod
+from benchmark_ctrs.certification.rs_certification import RSCertification
 from benchmark_ctrs.metrics import certified_radius as cr
 from benchmark_ctrs.models import Architecture, ArchitectureValues
 from benchmark_ctrs.models.cifar_resnet import resnet as cifar_resnet
@@ -69,8 +71,14 @@ def warmup_lr_scheduler(
     warmup_phase = ConstantLR(optimizer, factor=0.1, total_iters=1)
     normal_phase = StepLR(optimizer, step_size=step_size, gamma=gamma)
     return SequentialLR(
-        optimizer, [warmup_phase, normal_phase], milestones=[1], **kwargs
+        optimizer,
+        [warmup_phase, normal_phase],
+        milestones=[1],
+        **kwargs,
     )
+
+
+CertificationMethodCallable = Callable[[], CertificationMethod]
 
 
 class BaseModule(LightningModule, ABC):
@@ -82,7 +90,8 @@ class BaseModule(LightningModule, ABC):
     criterion: Criterion
 
     _arch: Architecture
-    _cert_params: Union[cr.Params, Literal[False]]
+    _certification: Optional[CertificationMethod]
+    _certification_params: cr.Params
     _num_classes: int
     _mean: list[float]
     _std: list[float]
@@ -104,7 +113,8 @@ class BaseModule(LightningModule, ABC):
         std: list[float],
         mean: list[float],
         params: HParams,
-        cert: Union[cr.Params, Literal[False]] = False,
+        certification: Union[CertificationMethodCallable, bool] = False,
+        certification_params: Optional[cr.Params] = None,
         arch: Optional[ArchitectureValues] = None,
         default_arch: ArchitectureValues = "resnet50",
         optimizer: Optional[OptimizerCallable] = None,
@@ -117,7 +127,18 @@ class BaseModule(LightningModule, ABC):
         self.strict_loading = False
 
         self._num_classes = num_classes
-        self._cert_params = cert
+        self._certification = (
+            None
+            if certification is False
+            else RSCertification()
+            if certification is True
+            else certification()
+        )
+        self._certification_params = (
+            cr.Params(self.hparams["sigma"])
+            if certification_params is None
+            else certification_params
+        )
         self._grads_log_interval = grads_log_interval
 
         self._arch = cast(
@@ -205,30 +226,30 @@ class BaseModule(LightningModule, ABC):
         self._val_cert = None
         if (
             stage in {"fit", "validate"}
-            and self._cert_params is not False
+            and self._certification is not None
             and self.hparams["sigma"] > 0
         ):
             self._val_cert = FeatureShare(
                 {
                     "certified_radius/average": cr.CertifiedRadius(
                         self.eval_model,
-                        self._cert_params,
+                        self._certification,
+                        self._certification_params,
                         num_classes=self._num_classes,
-                        sigma=self.hparams["sigma"],
                         reduction="mean",
                     ),
                     "certified_radius/best": cr.CertifiedRadius(
                         self.eval_model,
-                        self._cert_params,
+                        self._certification,
+                        self._certification_params,
                         num_classes=self._num_classes,
-                        sigma=self.hparams["sigma"],
                         reduction="max",
                     ),
                     "certified_radius/worst": cr.CertifiedRadius(
                         self.eval_model,
-                        self._cert_params,
+                        self._certification,
+                        self._certification_params,
                         num_classes=self._num_classes,
-                        sigma=self.hparams["sigma"],
                         reduction="min",
                     ),
                 }
@@ -237,14 +258,14 @@ class BaseModule(LightningModule, ABC):
         self._predict_cert = None
         if (
             stage == "predict"
-            and self._cert_params is not False
+            and self._certification is not None
             and self.hparams["sigma"] > 0
         ):
             self._predict_cert = cr.CertifiedRadius(
                 self.eval_model,
-                self._cert_params,
+                self._certification,
+                self._certification_params,
                 num_classes=self._num_classes,
-                sigma=self.hparams["sigma"],
                 reduction="none",
             )
 
@@ -270,7 +291,7 @@ class BaseModule(LightningModule, ABC):
         self, inputs: Tensor, *args: Any, add_noise: bool = True, **kwargs: Any
     ) -> Tensor:
         sigma = self.hparams["sigma"]
-        if add_noise and not math.isclose(sigma, 0):
+        if add_noise and sigma != 0:
             noises = torch.randn_like(inputs) * sigma
             inputs = torch.clamp(inputs + noises, 0.0, 1.0)
 
@@ -404,7 +425,7 @@ class BaseModule(LightningModule, ABC):
     def predict_step(self, batch: Batch, *args: Any, **kwargs: Any) -> PredictionResult:
         inputs, targets, *_ = batch
         result: PredictionResult = {
-            "clean": self.forward(inputs, add_noise=False),
+            "clean": self.forward(inputs, add_noise=False).argmax(dim=1),
         }
         if self._predict_cert:
             self._predict_cert.update(inputs, targets)

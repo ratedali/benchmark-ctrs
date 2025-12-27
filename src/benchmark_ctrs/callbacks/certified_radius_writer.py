@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 from csv import DictWriter
 from pathlib import Path
-from typing import Any, Final, Optional
+from typing import Any, Final, Optional, cast
 
 import lightning as L
 from lightning.pytorch.callbacks import BasePredictionWriter
@@ -77,18 +77,19 @@ class CertifiedRadiusWriter(BasePredictionWriter):
 
         batch_indices = list(batch_indices)
         _inputs, targets = batch
+        targets = cast("list[int]", targets.long().tolist())
+        predictions: list[float] = prediction["clean"].view(-1).tolist()
 
         clean_path = self._resolve_output_path(trainer, self._clean_filename)
-        predictions = prediction["clean"].view(-1)
 
-        if predictions.numel() > 0:
+        if len(predictions) > 0:
             with clean_path.open("at") as f:
                 writer = DictWriter(f, fieldnames=CLEAN_FIELDS)
                 writer.writerows(
                     {
                         "idx": batch_indices[i],
-                        "label": int(targets[i].item()),
-                        "predict": int(pred.item()),
+                        "label": targets[i],
+                        "predict": int(pred),
                         "correct": 1 if pred == targets[i] else 0,
                     }
                     for i, pred in enumerate(predictions)
@@ -97,20 +98,20 @@ class CertifiedRadiusWriter(BasePredictionWriter):
         if "certification" in prediction and not self._ignore_cert:
             cert_path = self._resolve_output_path(trainer, self._filename)
             cert = prediction["certification"]
-            indices = cert.indices.view(-1)
-            predictions = cert.predictions.view(-1)
-            radii = cert.radii.view(-1)
+            indices: list[int] = cert.indices.view(-1).long().tolist()
+            predictions: list[float] = cert.predictions.view(-1).tolist()
+            radii: list[float] = cert.radii.view(-1).tolist()
 
-            if indices.numel() > 0:
+            if len(indices) > 0:
                 with cert_path.open("at") as f:
                     writer = DictWriter(f, fieldnames=CERT_FIELDS)
                     writer.writerows(
                         {
                             "idx": batch_indices[i],
-                            "label": int(targets[i].item()),
-                            "predict": int(predictions[i].item()),
-                            "radius": float(radii[i].item()),
-                            "correct": 1 if predictions[i] == targets[i] else 0,
+                            "label": targets[i],
+                            "predict": predictions[i],
+                            "radius": radii[i],
+                            "correct": int(predictions[i] == targets[i]),
                         }
                         for i in indices
                     )
