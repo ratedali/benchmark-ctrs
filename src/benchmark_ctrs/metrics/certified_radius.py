@@ -115,20 +115,15 @@ class CertifiedRadius(Metric):
             alpha=self._alpha,
             num_classes=self._num_classes,
         )
-        radii = np.fromiter(
-            iter=(cert.radius for cert in certs),
-            dtype=float,
-        )
-        radii = torch.from_numpy(radii).to(self.device)
+        radii = torch.tensor([cert.radius for cert in certs])
 
-        predictions = np.fromiter(
-            iter=(
+        predictions = torch.tensor(
+            [
                 cert.prediction if not is_abstain(cert.prediction) else -1
                 for cert in certs
-            ),
-            dtype=np.long,
+            ],
+            dtype=torch.long,
         )
-        predictions = torch.from_numpy(predictions).to(targets)
 
         if self._reduction == "none":
             cast("list[Tensor]", self._radii).append(radii)

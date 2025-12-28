@@ -18,7 +18,7 @@ class CertifiedRadiusWriter(BasePredictionWriter):
         self,
         outdir: Optional[str] = None,
         filename: str = "cert.csv",
-        clean_filename: str = "pred.csv",
+        clean_filename: str = "clean.csv",
         *,
         ignore_cert: bool = False,
     ) -> None:
@@ -86,13 +86,15 @@ class CertifiedRadiusWriter(BasePredictionWriter):
             with clean_path.open("at") as f:
                 writer = DictWriter(f, fieldnames=CLEAN_FIELDS)
                 writer.writerows(
-                    {
-                        "idx": batch_indices[i],
-                        "label": targets[i],
-                        "predict": int(pred),
-                        "correct": 1 if pred == targets[i] else 0,
-                    }
-                    for i, pred in enumerate(predictions)
+                    [
+                        {
+                            "idx": batch_indices[i],
+                            "label": targets[i],
+                            "predict": int(pred),
+                            "correct": 1 if pred == targets[i] else 0,
+                        }
+                        for i, pred in enumerate(predictions)
+                    ]
                 )
 
         if "certification" in prediction and not self._ignore_cert:
@@ -106,14 +108,16 @@ class CertifiedRadiusWriter(BasePredictionWriter):
                 with cert_path.open("at") as f:
                     writer = DictWriter(f, fieldnames=CERT_FIELDS)
                     writer.writerows(
-                        {
-                            "idx": batch_indices[i],
-                            "label": targets[i],
-                            "predict": predictions[i],
-                            "radius": radii[i],
-                            "correct": int(predictions[i] == targets[i]),
-                        }
-                        for i in indices
+                        [
+                            {
+                                "idx": batch_indices[i],
+                                "label": targets[i],
+                                "predict": predictions[i],
+                                "radius": radii[i],
+                                "correct": int(predictions[i] == targets[i]),
+                            }
+                            for i in indices
+                        ]
                     )
 
     def _resolve_output_path(self, trainer: L.Trainer, filename: str) -> Path:
