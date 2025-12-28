@@ -115,7 +115,7 @@ class CertifiedRadius(Metric):
             alpha=self._alpha,
             num_classes=self._num_classes,
         )
-        radii = torch.tensor([cert.radius for cert in certs])
+        radii = torch.tensor([cert.radius for cert in certs], device=self.device)
 
         predictions = torch.tensor(
             [
@@ -123,6 +123,7 @@ class CertifiedRadius(Metric):
                 for cert in certs
             ],
             dtype=torch.long,
+            device=self.device,
         )
 
         if self._reduction == "none":

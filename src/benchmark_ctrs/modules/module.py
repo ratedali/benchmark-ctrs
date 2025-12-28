@@ -253,7 +253,7 @@ class BaseModule(LightningModule, ABC):
                         reduction="min",
                     ),
                 }
-            )
+            ).to(self.device)
 
         self._predict_cert = None
         if (
@@ -267,7 +267,7 @@ class BaseModule(LightningModule, ABC):
                 self._certification_params,
                 num_classes=self._num_classes,
                 reduction="none",
-            )
+            ).to(self.device)
 
     @override
     def configure_optimizers(self) -> CONFIGURE_OPTIMIZERS:
