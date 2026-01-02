@@ -1,5 +1,5 @@
 from collections.abc import Callable, Iterable, Sequence
-from typing import Any, TypedDict, Union
+from typing import Any, Optional, Union
 
 from lightning.pytorch.utilities.types import (
     LRSchedulerConfig,
@@ -9,9 +9,9 @@ from lightning.pytorch.utilities.types import (
 from torch import Tensor
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
-from typing_extensions import NotRequired
+from typing_extensions import NotRequired, TypedDict
 
-CONFIGURE_OPTIMIZERS = Union[
+ConfigureOptimizers = Union[
     Optimizer,
     Sequence[Optimizer],
     tuple[
@@ -34,12 +34,13 @@ CONFIGURE_OPTIMIZERS = Union[
 Classifier = Callable[[Tensor], Tensor]
 OptimizerCallable = Callable[[Iterable[Any]], Optimizer]
 LRSchedulerCallable = Callable[[Optimizer], Union[LRScheduler, ReduceLROnPlateau]]
-Criterion = Callable[[Tensor, Tensor], Tensor]
-CriterionCallable = Callable[[], Criterion]
 
 Batch = tuple[Tensor, ...]
 
 
-class StepOutput(TypedDict):
+class DictStepOutput(TypedDict, extra_items=Any):
     loss: NotRequired[Tensor]
     predictions: NotRequired[Tensor]
+
+
+StepOutput = Optional[DictStepOutput]

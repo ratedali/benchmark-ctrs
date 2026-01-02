@@ -1,38 +1,49 @@
-from typing import TYPE_CHECKING
-
+from typing import Any
 from torch.optim import SGD
 from typing_extensions import override
 
 from benchmark_ctrs.modules import BaseHParams, BaseModule
-from benchmark_ctrs.types import CONFIGURE_OPTIMIZERS, Batch, StepOutput
+from benchmark_ctrs.types import Batch, ConfigureOptimizers, StepOutput
 
 
 class MNISTStandard(BaseModule):
-    def __init__(self, *args, learning_rate: float = 0.1, **kwargs) -> None:
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(
             *args,
-            params=BaseHParams(
-                sigma=0.0,
-                learning_rate=learning_rate,
-                lr_decay=1,
-                lr_step=-1,
-                momentum=0,
-                weight_decay=0,
-            ),
+            params=BaseHParams(sigma=0.0),
             **kwargs,
         )
 
     @override
-    def configure_optimizers(self) -> CONFIGURE_OPTIMIZERS:
+    def configure_optimizers(self) -> ConfigureOptimizers:
         return SGD(self.parameters(), lr=self.hparams["learning_rate"])
 
     @override
-    def training_step(self, batch: Batch, *args, **kwargs) -> StepOutput:
-        return self._default_eval_step(batch)
+    def training_step(
+        self,
+        batch: Batch,
+        *args: Any,
+        **kwargs: Any,
+    ) -> StepOutput:
+        inputs, targets = batch[:2]
+        predictions = self.forward(inputs)
+        loss = self.criterion(predictions, targets)
+        return {
+            "loss": loss,
+            "predictions": predictions,
+        }
 
     @override
-    def _default_eval_step(self, batch: Batch, *args, **kwargs) -> StepOutput:
+    def validation_step(
+        self,
+        batch: Batch,
+        *args: Any,
+        **kwargs: Any,
+    ) -> StepOutput:
         inputs, targets = batch[:2]
-        predictions = self.forward(inputs, add_noise=False)
+        predictions = self.forward(inputs)
         loss = self.criterion(predictions, targets)
-        return {"loss": loss, "predictions": predictions}
+        return {
+            "loss": loss,
+            "predictions": predictions,
+        }

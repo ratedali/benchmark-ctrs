@@ -23,6 +23,7 @@ class BaseDataModule(L.LightningDataModule, ABC):
         workers: int = 4,
         cache_dir: Optional[Path] = None,
         with_ids: bool = False,
+        shuffle_train: bool = True,
     ):
         super().__init__()
         self._cache_dir = cache_dir or BaseDataModule.__default_cache_dir
@@ -58,7 +59,7 @@ class BaseDataModule(L.LightningDataModule, ABC):
             num_workers=self.hparams["workers"],
             pin_memory=True,
             persistent_workers=True,
-            shuffle=True,
+            shuffle=self.hparams["shuffle_train"],
         )
 
     @override
