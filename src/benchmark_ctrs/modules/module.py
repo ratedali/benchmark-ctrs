@@ -13,7 +13,7 @@ from torch.optim import SGD
 from torch.optim.lr_scheduler import StepLR
 from torch.optim.optimizer import Optimizer
 from torch.utils.tensorboard.writer import SummaryWriter
-from torchmetrics import Metric, MetricCollection
+from torchmetrics import Metric, MetricCollection, SumMetric
 from torchmetrics.aggregation import MeanMetric
 from torchmetrics.classification import Accuracy
 from torchmetrics.wrappers import FeatureShare
@@ -58,6 +58,7 @@ class BaseModule(L.LightningModule):
     grads_log_interval: int
 
     metric_batch_time: Metric
+    metric_epoch_time: Metric
     metric_acc_train: MetricCollection
     metric_acc_val: MetricCollection
     metric_loss_train: Metric
@@ -114,14 +115,20 @@ class BaseModule(L.LightningModule):
         self.metric_acc_train = MetricCollection(
             {
                 "accuracy": Accuracy(task="multiclass", num_classes=self.num_classes),
+                "accuracy_top5": Accuracy(
+                    task="multiclass",
+                    num_classes=self.num_classes,
+                    top_k=5,
+                ),
             },
             prefix="train/",
         )
-        self.metric_loss_train = MeanMetric()
-        self.metric_batch_time = MeanMetric()
+        self.metric_loss_train = MeanMetric(nan_strategy="error")
+        self.metric_batch_time = MeanMetric(nan_strategy="error")
+        self.metric_epoch_time = SumMetric(nan_strategy="error")
 
         self.metric_acc_val = self.metric_acc_train.clone(prefix="val/")
-        self.metric_loss_val = MeanMetric()
+        self.metric_loss_val = MeanMetric(nan_strategy="error")
 
     @override
     def setup(self, stage: str) -> None:
@@ -228,9 +235,10 @@ class BaseModule(L.LightningModule):
         if self.logger:
             keys = [
                 f"{key}_{suffix}"
-                for key in ("time/sec", "train/loss")
+                for key in ("time/iteration", "train/loss")
                 for suffix in ("epoch", "step")
             ]
+            keys.extend(["time/epoch"])
             metrics = dict.fromkeys(
                 chain(
                     keys,
@@ -261,8 +269,10 @@ class BaseModule(L.LightningModule):
                 f"'loss' and 'predictions', got value: {outputs}"
             )
 
-        self.metric_batch_time(time.perf_counter() - self._batch_start)
-        self.log("time/sec", self.metric_batch_time, on_epoch=True)
+        iteration_time = time.perf_counter() - self._batch_start
+        self.metric_batch_time(iteration_time)
+        self.metric_epoch_time.update(iteration_time)
+        self.log("time/iteration", self.metric_batch_time, on_epoch=True)
 
         if outputs is not None:
             with torch.no_grad():
@@ -289,6 +299,7 @@ class BaseModule(L.LightningModule):
     @override
     def on_train_epoch_end(self) -> None:
         super().on_train_epoch_end()
+        self.log("time/epoch", self.metric_epoch_time)
         if any(m.update_called for m in self.metric_acc_train.values()):
             self.log_dict(self.metric_acc_train)
 

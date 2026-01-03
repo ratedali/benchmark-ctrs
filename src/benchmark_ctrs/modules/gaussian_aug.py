@@ -12,7 +12,11 @@ from benchmark_ctrs.types import Batch, StepOutput
 class GaussianAug(BaseModule):
     @override
     def forward(
-        self, inputs: Tensor, *args: Any, add_noise: bool = False, **kwargs: Any
+        self,
+        inputs: Tensor,
+        *args: Any,
+        add_noise: bool = False,
+        **kwargs: Any,
     ) -> Tensor:
         sigma = self.hparams["sigma"]
         if add_noise and sigma != 0:
