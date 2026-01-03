@@ -48,7 +48,7 @@ class ImageNet(BaseDataModule):
                     split="train",
                     transform=self.__train_transforms,
                 ),
-                lengths=(0.8, 0.2),
+                lengths=(1280167, 1000),
             )
         elif stage == "test":
             self._test = imagenet.ImageNet(
@@ -62,7 +62,7 @@ class ImageNet(BaseDataModule):
     @property
     @override
     def classes(self) -> int:
-        return 10
+        return 1000
 
     @property
     @override

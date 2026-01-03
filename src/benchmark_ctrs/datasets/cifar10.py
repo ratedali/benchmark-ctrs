@@ -15,7 +15,7 @@ class CIFAR10(BaseDataModule):
 
     default_arch: ClassVar = Architecture.CIFARResNet110
 
-    def __init__(self, *args: Any, batch_size: int = 400, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, batch_size: int = 256, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs, batch_size=batch_size)
         self.name = "cifar10"
 

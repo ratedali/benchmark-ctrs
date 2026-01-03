@@ -15,7 +15,7 @@ class MNIST(BaseDataModule):
 
     default_arch: ClassVar = Architecture.LeNet
 
-    def __init__(self, *args: Any, batch_size: int = 400, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, batch_size: int = 256, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs, batch_size=batch_size)
         self.name = "mnist"
 
