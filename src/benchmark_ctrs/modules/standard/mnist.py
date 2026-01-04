@@ -16,7 +16,7 @@ class MNISTStandard(BaseModule):
 
     @override
     def configure_optimizers(self) -> ConfigureOptimizers:
-        return SGD(self.parameters(), lr=self.hparams["learning_rate"])
+        return SGD(self.parameters(), lr=0.1)
 
     @override
     def training_step(

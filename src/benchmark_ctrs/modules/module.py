@@ -1,7 +1,7 @@
 import dataclasses
 import time
 from itertools import chain
-from typing import Any, Optional, Union, cast
+from typing import Any, Literal, Optional, Union, cast
 
 import lightning as L
 import torch
@@ -52,8 +52,6 @@ class BaseModule(L.LightningModule):
     criterion: nn.Module
 
     model_architecture: Architecture
-    certification: Optional[CertificationMethod]
-    certification_params: cr.Params
     num_classes: int
     grads_log_interval: int
 
@@ -73,7 +71,7 @@ class BaseModule(L.LightningModule):
         std: list[float],
         mean: list[float],
         params: HParams,
-        certification: Union[CertificationMethod, bool] = False,
+        certification: Union[CertificationMethod, Literal[True], None] = None,
         certification_params: Optional[cr.Params] = None,
         arch: Optional[ArchitectureValues] = None,
         default_arch: ArchitectureValues = "resnet50",
@@ -83,20 +81,9 @@ class BaseModule(L.LightningModule):
         super().__init__()
         self.save_hyperparameters(dataclasses.asdict(params))
         self.strict_loading = False
+        self.automatic_accuracy = True
 
         self.num_classes = num_classes
-        self.certification = (
-            None
-            if certification is False
-            else RSCertification()
-            if certification is True
-            else certification
-        )
-        self.certification_params = (
-            cr.Params(self.hparams["sigma"])
-            if certification_params is None
-            else certification_params
-        )
         self.grads_log_interval = grads_log_interval
 
         self.model_architecture = cast(
@@ -106,12 +93,40 @@ class BaseModule(L.LightningModule):
                 source="value",
             ),
         )
-        self.__mean = list(mean)
-        self.__std = list(std)
-
         self.criterion = criterion or nn.CrossEntropyLoss(reduction="mean")
 
-        self.automatic_accuracy = True
+        self.init_model(list(mean), list(std))
+        self.init_metrics(
+            certification=certification,
+            certification_params=certification_params,
+        )
+
+    def init_model(self, mean: list[float], std: list[float]) -> None:
+        if self.model_architecture == Architecture.LeNet:
+            self.raw_model = LeNet()
+        elif self.model_architecture == Architecture.ResNet50:
+            self.raw_model = models.resnet50(
+                weights=None,
+                num_classes=self.num_classes,
+            )
+        elif self.model_architecture.is_cifarresnet:
+            self.raw_model = cifar_resnet(
+                depth=self.model_architecture.resnet_depth, num_classes=self.num_classes
+            )
+        else:
+            raise ValueError(
+                f"Unknown value for arch: {self.model_architecture}. "
+                f"Possible values are: {', '.join(Architecture._member_names_)}"
+            )
+
+        self.normalization_layer = Normalization(mean=mean, sd=std)
+        self.model = torch.nn.Sequential(self.normalization_layer, self.raw_model)
+
+    def init_metrics(
+        self,
+        certification: Union[cr.CertificationMethod, Literal[True], None],
+        certification_params: Optional[cr.Params],
+    ) -> None:
         self.metric_acc_train = MetricCollection(
             {
                 "accuracy": Accuracy(task="multiclass", num_classes=self.num_classes),
@@ -130,73 +145,51 @@ class BaseModule(L.LightningModule):
         self.metric_acc_val = self.metric_acc_train.clone(prefix="val/")
         self.metric_loss_val = MeanMetric(nan_strategy="error")
 
-    @override
-    def setup(self, stage: str) -> None:
-        if self.model_architecture == Architecture.LeNet:
-            self.raw_model = LeNet()
-        elif self.model_architecture == Architecture.ResNet50:
-            self.raw_model = models.resnet50(
-                weights=None,
-                num_classes=self.num_classes,
-            )
-        elif self.model_architecture.is_cifarresnet:
-            self.raw_model = cifar_resnet(
-                depth=self.model_architecture.resnet_depth, num_classes=self.num_classes
-            )
-        else:
-            raise ValueError(
-                f"Unknown value for arch: {self.model_architecture}. "
-                f"Possible values are: {', '.join(Architecture._member_names_)}"
-            )
-
-        self.normalization_layer = Normalization(mean=self.__mean, sd=self.__std)
-        self.model = torch.nn.Sequential(self.normalization_layer, self.raw_model)
+        # Setup certified radius metrics
+        sigma = float(self.hparams["sigma"])
+        method: Optional[CertificationMethod] = (
+            RSCertification() if certification is True else certification
+        )
 
         self.metric_val_cert = None
-        if (
-            stage in {"fit", "validate"}
-            and self.certification is not None
-            and self.hparams["sigma"] > 0
-        ):
+        if method is not None:
+            params = certification_params or cr.Params(sigma)
             self.metric_val_cert = FeatureShare(
                 {
                     "certified_radius/average": cr.CertifiedRadius(
                         self.eval_model,
-                        self.certification,
-                        self.certification_params,
+                        method,
+                        params,
                         num_classes=self.num_classes,
                         reduction="mean",
                     ),
                     "certified_radius/best": cr.CertifiedRadius(
                         self.eval_model,
-                        self.certification,
-                        self.certification_params,
+                        method,
+                        params,
                         num_classes=self.num_classes,
                         reduction="max",
                     ),
                     "certified_radius/worst": cr.CertifiedRadius(
                         self.eval_model,
-                        self.certification,
-                        self.certification_params,
+                        method,
+                        params,
                         num_classes=self.num_classes,
                         reduction="min",
                     ),
                 }
-            ).to(self.device)
+            )
 
         self.metric_predict_cert = None
-        if (
-            stage == "predict"
-            and self.certification is not None
-            and self.hparams["sigma"] > 0
-        ):
+        if method is not None:
+            params = certification_params or cr.Params(sigma)
             self.metric_predict_cert = cr.CertifiedRadius(
                 self.eval_model,
-                self.certification,
-                self.certification_params,
+                method,
+                params,
                 num_classes=self.num_classes,
                 reduction="none",
-            ).to(self.device)
+            )
 
     @override
     def configure_optimizers(self) -> ConfigureOptimizers:

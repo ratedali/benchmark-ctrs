@@ -1,14 +1,10 @@
-from collections.abc import Sequence
-
-import lightning as L
+# ruff: noqa: PLC0415
 
 from benchmark_ctrs import plugins
-from benchmark_ctrs.datasets.module import BaseDataModule
-from benchmark_ctrs.modules.module import BaseModule
 
 
 @plugins.hookimpl
-def register_callbacks() -> Sequence[type[L.Callback]]:
+def register_callbacks():
     from benchmark_ctrs.callbacks.certified_radius_writer import (
         CertifiedRadiusWriter,
     )
@@ -17,7 +13,7 @@ def register_callbacks() -> Sequence[type[L.Callback]]:
 
 
 @plugins.hookimpl
-def register_data_modules() -> Sequence[type[BaseDataModule]]:
+def register_data_modules():
     from benchmark_ctrs.datasets.cifar10 import CIFAR10
     from benchmark_ctrs.datasets.imagenet import ImageNet
     from benchmark_ctrs.datasets.mnist import MNIST
@@ -30,7 +26,7 @@ def register_data_modules() -> Sequence[type[BaseDataModule]]:
 
 
 @plugins.hookimpl
-def register_models() -> Sequence[type[BaseModule]]:
+def register_models():
     from benchmark_ctrs.modules.gaussian_aug import GaussianAug
     from benchmark_ctrs.modules.standard.cifar import CIFARStandard
     from benchmark_ctrs.modules.standard.mnist import MNISTStandard
@@ -39,4 +35,15 @@ def register_models() -> Sequence[type[BaseModule]]:
         GaussianAug,
         CIFARStandard,
         MNISTStandard,
+    )
+
+
+@plugins.hookimpl
+def register_lr_schedulers():
+    from benchmark_ctrs.utilities import ChainedLR, GradualStepLR, SequentialLR
+
+    return (
+        ChainedLR,
+        GradualStepLR,
+        SequentialLR,
     )
