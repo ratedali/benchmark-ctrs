@@ -48,9 +48,9 @@ class SamplingQueue:
             self.batch_indices[item.id].append(batch_idx)
             self.batch_ids[batch_idx] = item.id
 
-            X.append(inputs[batch_idx, ...])
+            X.append(inputs[item.id, ...])
             if targets is not None:
-                y.append(targets[batch_idx].item())
+                y.append(targets[item.id].item())
 
             heappush(self.heap, _QueueItem(item.cnt + 1, item.id))
         self.X = torch.stack(X)
@@ -71,18 +71,18 @@ class SamplingQueue:
     def replace_input(self, input_id: InputId, exclude: Iterable[InputId]) -> None:
         for j in self.batch_indices[input_id]:
             while True:
-                cnt, idx = heappop(self.heap)
-                if idx not in exclude:
+                next_item = heappop(self.heap)
+                if next_item.id not in exclude:
                     break
 
-            self.batch_indices[idx].append(j)
-            self.batch_ids[j] = idx
+            self.batch_indices[next_item.id].append(j)
+            self.batch_ids[j] = next_item.id
 
             inputs, targets = self.data[:2]
             X, y = self.batch
-            if cnt == 0:
-                X[j], y[j] = inputs[idx, ...], targets[idx]
+            if next_item.cnt == 0:
+                X[j], y[j] = inputs[next_item.id, ...], targets[next_item.id]
             else:
-                k = self.batch_indices[idx][0]
+                k = self.batch_indices[next_item.id][0]
                 X[j], y[j] = X[k], y[k]
-            heappush(self.heap, _QueueItem(cnt + 1, idx))
+            heappush(self.heap, _QueueItem(next_item.cnt + 1, next_item.id))
