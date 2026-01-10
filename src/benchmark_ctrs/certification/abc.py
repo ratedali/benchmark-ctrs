@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import NamedTuple, Union
+from typing import NamedTuple, Optional, Union
 
 from torch import Tensor
 from typing_extensions import TypeIs
@@ -22,6 +22,8 @@ def is_abstain(prediction: Prediction) -> TypeIs[_ABSTAIN_TYPE]:
 class Certificate(NamedTuple):
     prediction: Prediction
     radius: float
+    pA: Optional[float] = None
+    pB: Optional[float] = None
 
 
 class CertificationMethod(ABC):

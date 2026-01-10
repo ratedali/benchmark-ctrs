@@ -47,3 +47,16 @@ def register_lr_schedulers():
         GradualStepLR,
         SequentialLR,
     )
+
+
+@plugins.hookimpl
+def register_certification_methods():
+    from benchmark_ctrs.certification.rs_certification import RSCertification
+    from benchmark_ctrs.certification.sequence_certification import (
+        SequenceCertificaiton,
+    )
+
+    return (
+        RSCertification,
+        SequenceCertificaiton,
+    )

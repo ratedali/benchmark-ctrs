@@ -25,6 +25,11 @@ def main(args: ArgsType = None) -> None:
         logger.exception("Error raised when registering plugin data modules.")
 
     try:
+        hook.register_certification_methods()
+    except Exception:
+        logger.exception("Error raised when registering plugin certification methods.")
+
+    try:
         hook.register_models()
     except Exception:
         logger.exception("Error raised when registering plugin training modules.")
