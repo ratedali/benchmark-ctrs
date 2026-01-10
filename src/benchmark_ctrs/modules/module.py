@@ -16,7 +16,6 @@ from torch.utils.tensorboard.writer import SummaryWriter
 from torchmetrics import Metric, MetricCollection, SumMetric
 from torchmetrics.aggregation import MeanMetric
 from torchmetrics.classification import Accuracy
-from torchmetrics.wrappers import FeatureShare
 from torchvision import models
 from typing_extensions import NotRequired, TypedDict, override
 
@@ -61,7 +60,7 @@ class BaseModule(L.LightningModule):
     metric_acc_val: MetricCollection
     metric_loss_train: Metric
     metric_loss_val: Metric
-    metric_val_cert: Optional[MetricCollection]
+    metric_val_cert: Optional[cr.CertifiedRadius]
     metric_predict_cert: Optional[cr.CertifiedRadius]
 
     def __init__(
@@ -152,37 +151,18 @@ class BaseModule(L.LightningModule):
         )
 
         self.metric_val_cert = None
+        self.metric_predict_cert = None
+        params = certification_params or cr.Params(sigma)
         if method is not None:
-            params = certification_params or cr.Params(sigma)
-            self.metric_val_cert = FeatureShare(
-                {
-                    "certified_radius/average": cr.CertifiedRadius(
-                        self.eval_model,
-                        method,
-                        params,
-                        num_classes=self.num_classes,
-                        reduction="mean",
-                    ),
-                    "certified_radius/best": cr.CertifiedRadius(
-                        self.eval_model,
-                        method,
-                        params,
-                        num_classes=self.num_classes,
-                        reduction="max",
-                    ),
-                    "certified_radius/worst": cr.CertifiedRadius(
-                        self.eval_model,
-                        method,
-                        params,
-                        num_classes=self.num_classes,
-                        reduction="min",
-                    ),
-                }
+            self.metric_val_cert = cr.CertifiedRadius(
+                self.eval_model,
+                method,
+                params,
+                num_classes=self.num_classes,
+                reduction="none",
             )
 
-        self.metric_predict_cert = None
         if method is not None:
-            params = certification_params or cr.Params(sigma)
             self.metric_predict_cert = cr.CertifiedRadius(
                 self.eval_model,
                 method,
@@ -237,7 +217,7 @@ class BaseModule(L.LightningModule):
                     keys,
                     self.metric_acc_train.keys(),
                     self.metric_acc_val.keys(),
-                    self.metric_val_cert.keys() if self.metric_val_cert else (),
+                    [f"certified_radius/{cr}" for cr in ("average", "best", "worst")],
                 ),
                 0.0,
             )
@@ -342,12 +322,17 @@ class BaseModule(L.LightningModule):
         super().on_validation_epoch_end()
         if self.metric_loss_val.update_called:
             self.log("val/loss", self.metric_loss_val, prog_bar=True)
+
         if any(m.update_called for m in self.metric_acc_val.values()):
             self.log_dict(self.metric_acc_val)
-        if self.metric_val_cert is not None and any(
-            m.update_called for m in self.metric_val_cert.values()
-        ):
-            self.log_dict(self.metric_val_cert)
+
+        if self.metric_val_cert is not None and self.metric_val_cert.update_called:
+            cert = cast("cr.CertificationResult", self.metric_val_cert.compute())
+            self.metric_val_cert.reset()
+
+            self.log("certified_radius/average", cert.radii.mean())
+            self.log("certified_radius/best", cert.radii.max())
+            self.log("certified_radius/worst", cert.radii.min())
 
     @override
     def validation_step(

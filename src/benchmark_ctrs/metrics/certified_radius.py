@@ -147,7 +147,7 @@ class CertifiedRadius(Metric):
         """Compute the certified radius metric value
 
         Returns:
-            Tensor | CertificationResult: returns the CertificationResults tuple
+            (Tensor | CertificationResult): returns the CertificationResults tuple
             if reduction="none", otherwise it returns the aggregated certified radii
         """
         if self._reduction == "none":
