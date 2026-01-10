@@ -46,7 +46,7 @@ class SequenceMode(LightningEnum):
     Betting = "betting"
 
 
-class SequenceCertificaiton(CertificationMethod):
+class SequenceCertification(CertificationMethod):
     def __init__(
         self,
         n0: int = 128,

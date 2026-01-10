@@ -53,10 +53,10 @@ def register_lr_schedulers():
 def register_certification_methods():
     from benchmark_ctrs.certification.rs_certification import RSCertification
     from benchmark_ctrs.certification.sequence_certification import (
-        SequenceCertificaiton,
+        SequenceCertification,
     )
 
     return (
         RSCertification,
-        SequenceCertificaiton,
+        SequenceCertification,
     )
