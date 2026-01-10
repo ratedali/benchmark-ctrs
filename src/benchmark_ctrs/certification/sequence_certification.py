@@ -51,7 +51,7 @@ class SequenceCertificaiton(CertificationMethod):
         self,
         n0: int = 128,
         n: int = 100_000,
-        batch_size: int = 32,
+        batch_size: int = 10_000,
         mode: SequenceModeOptions = "union-bound",
         early_stopping: float = 1e-4,
     ) -> None:
@@ -63,8 +63,8 @@ class SequenceCertificaiton(CertificationMethod):
                 f" Supported values are {[m.value for m in SequenceMode]}"
             )
 
-        self.n0 = math.ceil(n0 / batch_size) * batch_size
-        self.n = math.ceil(n / batch_size) * batch_size
+        self.n0 = n0
+        self.n = n
         self.batch_size = batch_size
         self.mode = cast("SequenceMode", parsed_mode)
         self.early_stopping = early_stopping

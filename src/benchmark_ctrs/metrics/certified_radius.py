@@ -1,7 +1,6 @@
 import dataclasses
-from typing import Any, ClassVar, Literal, NamedTuple, Union, cast
+from typing import Any, ClassVar, Literal, NamedTuple, Optional, Union, cast
 
-import numpy as np
 import torch
 from lightning.pytorch.utilities import LightningEnum
 from torch import Tensor
@@ -99,7 +98,7 @@ class CertifiedRadius(Metric):
             )
 
     @torch.inference_mode()
-    def update(self, inputs: Tensor, targets: Tensor) -> None:
+    def update(self, inputs: Tensor, targets: Optional[Tensor] = None) -> None:
         indices = torch.arange(
             start=self._start,
             end=self._max if self._max is not False else inputs.size(0),
@@ -108,13 +107,22 @@ class CertifiedRadius(Metric):
             dtype=torch.long,
         )
 
-        certs = self._certifier.certify_batch(
-            self._model,
-            data=(inputs, targets),
-            sigma=self._sigma,
-            alpha=self._alpha,
-            num_classes=self._num_classes,
-        )
+        if targets is not None:
+            certs = self._certifier.certify_batch(
+                self._model,
+                data=(inputs, targets),
+                sigma=self._sigma,
+                alpha=self._alpha,
+                num_classes=self._num_classes,
+            )
+        else:
+            certs = self._certifier.predict_batch(
+                self._model,
+                inputs,
+                sigma=self._sigma,
+                alpha=self._alpha,
+                num_classes=self._num_classes,
+            )
         radii = torch.tensor([cert.radius for cert in certs], device=self.device)
 
         predictions = torch.tensor(
@@ -132,12 +140,19 @@ class CertifiedRadius(Metric):
             self._predictions.append(predictions)
         else:
             _radii = cast("Tensor", self._radii)
-            correct = targets[indices] == predictions
+            if targets is not None:
+                correct = targets[indices] == predictions
+            else:
+                correct = torch.ones_like(predictions, dtype=torch.bool)
 
-            if self._reduction == "mean":
+            if not correct.any().item():
+                self._radii = torch.tensor(0.0)
+                if self._reduction == "mean":
+                    self._total += radii.numel()
+            elif self._reduction == "mean":
                 self._radii += radii[correct].sum()
                 self._total += radii.numel()
-            elif self._reduction == "max" and correct.any().item():
+            elif self._reduction == "max":
                 self._radii = torch.max(_radii, radii[correct].max())
             elif self._reduction == "min" and correct.any().item():
                 self._radii = torch.min(_radii, radii[correct].min())
