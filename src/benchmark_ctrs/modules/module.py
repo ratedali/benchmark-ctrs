@@ -354,12 +354,12 @@ class BaseModule(L.LightningModule):
 
     @override
     def predict_step(self, batch: Batch, *args: Any, **kwargs: Any) -> PredictionResult:
-        inputs, targets, *_ = batch
+        inputs = batch[0]
         result: PredictionResult = {
             "clean": self.forward(inputs).argmax(dim=1),
         }
         if self.metric_predict_cert:
-            self.metric_predict_cert.update(inputs, targets)
+            self.metric_predict_cert.update(inputs)
             cert = cast("cr.CertificationResult", self.metric_predict_cert.compute())
             self.metric_predict_cert.reset()
             result["certification"] = cert

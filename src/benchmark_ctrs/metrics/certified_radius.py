@@ -39,7 +39,8 @@ class CertifiedRadius(Metric):
     plot_lower_bound = 0.0
     feature_network: ClassVar = "_model"
 
-    _radii: Union[Tensor, list[Tensor]]
+    _radii: list[Tensor]
+    _radius: Tensor
     _indices: list[Tensor]
     _predictions: list[Tensor]
     _total: Tensor
@@ -78,16 +79,20 @@ class CertifiedRadius(Metric):
             self.add_state("_predictions", default=[], dist_reduce_fx="cat")
             self.add_state("_indices", default=[], dist_reduce_fx="cat")
         elif self._reduction == "max":
-            self.add_state("_radii", default=torch.tensor(0), dist_reduce_fx="max")
+            self.add_state(
+                "_radius",
+                default=torch.tensor(0.0, dtype=torch.float),
+                dist_reduce_fx="max",
+            )
         elif self._reduction == "min":
             self.add_state(
-                "_radii",
+                "_radius",
                 default=torch.tensor(torch.inf, dtype=torch.float),
                 dist_reduce_fx="min",
             )
         elif self._reduction == "mean":
             self.add_state(
-                "_radii",
+                "_radius",
                 default=torch.tensor(0.0, dtype=torch.float),
                 dist_reduce_fx="sum",
             )
@@ -108,9 +113,10 @@ class CertifiedRadius(Metric):
         )
 
         if targets is not None:
+            batch = (inputs[indices, ...], targets[indices])
             certs = self._certifier.certify_batch(
                 self._model,
-                data=(inputs, targets),
+                batch,
                 sigma=self._sigma,
                 alpha=self._alpha,
                 num_classes=self._num_classes,
@@ -118,13 +124,17 @@ class CertifiedRadius(Metric):
         else:
             certs = self._certifier.predict_batch(
                 self._model,
-                inputs,
+                inputs[indices, ...],
                 sigma=self._sigma,
                 alpha=self._alpha,
                 num_classes=self._num_classes,
             )
-        radii = torch.tensor([cert.radius for cert in certs], device=self.device)
 
+        radii = torch.tensor(
+            [cert.radius for cert in certs],
+            device=self.device,
+            dtype=torch.float,
+        )
         predictions = torch.tensor(
             [
                 cert.prediction if not is_abstain(cert.prediction) else -1
@@ -134,28 +144,22 @@ class CertifiedRadius(Metric):
             device=self.device,
         )
 
-        if self._reduction == "none":
-            cast("list[Tensor]", self._radii).append(radii)
+        if targets is not None:
+            radii[targets[indices] != predictions] = (
+                torch.inf if self._reduction == "min" else 0.0
+            )
+
+        if self._reduction == "mean":
+            self._radius += radii.sum()
+            self._total += radii.numel()
+        elif self._reduction == "max":
+            self._radius = torch.max(self._radius, radii.max())
+        elif self._reduction == "min":
+            self._radius = torch.min(self._radius, radii.min())
+        else:
+            self._radii.append(radii)
             self._indices.append(indices)
             self._predictions.append(predictions)
-        else:
-            _radii = cast("Tensor", self._radii)
-            if targets is not None:
-                correct = targets[indices] == predictions
-            else:
-                correct = torch.ones_like(predictions, dtype=torch.bool)
-
-            if not correct.any().item():
-                self._radii = torch.tensor(0.0)
-                if self._reduction == "mean":
-                    self._total += radii.numel()
-            elif self._reduction == "mean":
-                self._radii += radii[correct].sum()
-                self._total += radii.numel()
-            elif self._reduction == "max":
-                self._radii = torch.max(_radii, radii[correct].max())
-            elif self._reduction == "min" and correct.any().item():
-                self._radii = torch.min(_radii, radii[correct].min())
 
     @torch.inference_mode()
     def compute(self) -> Union[Tensor, CertificationResult]:
@@ -165,23 +169,28 @@ class CertifiedRadius(Metric):
             (Tensor | CertificationResult): returns the CertificationResults tuple
             if reduction="none", otherwise it returns the aggregated certified radii
         """
-        if self._reduction == "none":
-            radii = dim_zero_cat(self._radii)
-            indices = dim_zero_cat(self._indices)
-            predictions = dim_zero_cat(self._predictions)
-            return CertificationResult(
-                indices=indices,
-                predictions=predictions,
-                radii=radii,
-            )
-        radii = cast("Tensor", self._radii)
-        if self._reduction == "max":
-            return radii
+        if self._reduction == "mean":
+            return self._radius / self._total
+
         if self._reduction == "min":
             return (
-                radii
-                if not torch.isinf(radii).any().item()
-                else torch.tensor(0.0, dtype=torch.float, device=self.device)
+                self._radius
+                if not torch.isinf(self._radius)
+                else torch.tensor(
+                    0.0,
+                    dtype=torch.float,
+                    device=self.device,
+                )
             )
 
-        return radii.float() / self._total
+        if self._reduction == "max":
+            return self._radius
+
+        radii = dim_zero_cat(self._radii)
+        indices = dim_zero_cat(self._indices)
+        predictions = dim_zero_cat(self._predictions)
+        return CertificationResult(
+            indices=indices,
+            predictions=predictions,
+            radii=radii,
+        )

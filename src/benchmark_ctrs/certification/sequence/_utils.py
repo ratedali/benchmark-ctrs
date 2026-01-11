@@ -95,24 +95,26 @@ class RunningTrial:
     num_samples: int
     countA: int
     pA: Optional[float] = None
-    finished: bool = False
+    done: bool = False
 
     @classmethod
     def create_initial(cls, *args: Any, **kwargs: Any) -> "Self":
         return cls(0, 0, *args, **kwargs)
 
-    def add_sample(self, *, correct: bool) -> "Self":
+    def add_sample(self, pred: int, y: int) -> "Self":
         return dataclasses.replace(
             self,
             num_samples=self.num_samples + 1,
-            countA=self.countA + correct,
+            countA=self.countA + (pred == y),
         )
 
     def update_pA(self, pA: Optional[float]) -> "Self":
         final_pA = pA
         if pA is not None and self.pA is not None:
-            final_pA = min(pA, self.pA)
+            final_pA = max(pA, self.pA)
         return dataclasses.replace(self, pA=final_pA)
 
-    def done(self) -> "Self":
-        return dataclasses.replace(self, finished=True)
+    def mark_done(self, *, is_done: bool = True) -> "Self":
+        if not is_done:
+            return self
+        return dataclasses.replace(self, done=True)

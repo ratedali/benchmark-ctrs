@@ -1,3 +1,4 @@
+import math
 from abc import ABC, abstractmethod
 from typing import Generic, Optional, TypeVar, cast
 
@@ -20,11 +21,21 @@ _TTrial = TypeVar("_TTrial", bound=RunningTrial)
 
 
 class SequenceCertification(CertificationMethod, ABC, Generic[_TTrial]):
-    def __init__(self, n0: int, n: int, batch_size: int) -> None:
+    def __init__(
+        self,
+        n0: int = 100,
+        n: int = 100000,
+        batch_size: int = 10000,
+        *,
+        stop_on_plateu: bool = False,
+        stop_tol: float = 0.001,
+    ) -> None:
         super().__init__()
         self.n0 = n0
         self.n = n
         self.batch_size = batch_size
+        self.stop_on_plateu = stop_on_plateu
+        self.stop_tol = stop_tol
 
     @override
     def predict(
@@ -72,7 +83,7 @@ class SequenceCertification(CertificationMethod, ABC, Generic[_TTrial]):
         y: int,
         *,
         sigma: float,
-        alpha: float = 0.001,
+        alpha: float = 0.0001,
         num_classes: int,
     ) -> Certificate:
         batch = (
@@ -117,27 +128,42 @@ class SequenceCertification(CertificationMethod, ABC, Generic[_TTrial]):
         results: dict[InputId, Certificate] = {}
         done = 0
         while done < queue.total:
-            preds = self.sample_noise(model, X, sigma).argmax(-1)
-            preds = cast("list[bool]", (preds == y).tolist())
-            for i, correct in enumerate(preds):
+            preds = cast(
+                "list[int]",
+                self.sample_noise(model, X, sigma).argmax(-1).tolist(),
+            )
+            for i, pred in enumerate(preds):
                 batch_idx = BatchIndex(i)
                 if queue.new[batch_idx]:
                     queue.new[batch_idx] = False
                     continue
 
                 input_id = queue.batch_ids[batch_idx]
-                trial = trials[input_id].add_sample(correct=correct)
+                cA = int(y[batch_idx].item())
+                trials[input_id] = trials[input_id].add_sample(pred, cA)
 
-                update = self.update_trial(trial, alpha)
+                update = self.update_trial(
+                    trials[input_id], pred=pred, y=cA, alpha=alpha
+                )
                 if update is not None:
-                    trials[input_id] = update
+                    pA = trials[input_id].pA
+                    stop = (
+                        self.stop_on_plateu
+                        and pA is not None
+                        and update.pA is not None
+                        and math.isclose(
+                            pA,
+                            update.pA,
+                            abs_tol=self.stop_tol,
+                        )
+                    )
+                    trials[input_id] = update.mark_done(is_done=stop)
 
                 if trials[input_id].done or trials[input_id].num_samples >= self.n:
-                    cA = int(y[batch_idx].item())
                     results[input_id] = self.get_certificate(
                         trials[input_id],
-                        cA,
-                        sigma,
+                        y=cA,
+                        sigma=sigma,
                     )
 
                 if input_id in results:
@@ -155,6 +181,8 @@ class SequenceCertification(CertificationMethod, ABC, Generic[_TTrial]):
     def update_trial(
         self,
         trial: _TTrial,
+        pred: int,
+        y: int,
         alpha: float,
     ) -> Optional[_TTrial]: ...
 
@@ -210,6 +238,6 @@ class SequenceCertification(CertificationMethod, ABC, Generic[_TTrial]):
     ) -> Certificate:
         pA = trial.pA
         if pA is None:
-            return Certificate(prediction=_ABSTAIN, radius=0)
+            return Certificate(_ABSTAIN, 0.0)
         radius = sigma * cast("float", norm.ppf(pA).item())
-        return Certificate(prediction=y, radius=radius, pA=pA)
+        return Certificate(y, radius, pA=pA)

@@ -155,7 +155,7 @@ class RSCertification(CertificationMethod):
                 raise NotImplementedError
         else:
             raise NotImplementedError
-        return Certificate(cA, radius)
+        return Certificate(cA, radius, pA=pABar)
 
     def _sample_noise(
         self,
