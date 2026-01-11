@@ -52,11 +52,11 @@ def register_lr_schedulers():
 @plugins.hookimpl
 def register_certification_methods():
     from benchmark_ctrs.certification.rs_certification import RSCertification
-    from benchmark_ctrs.certification.sequence_certification import (
-        SequenceCertification,
+    from benchmark_ctrs.certification.sequence.union_bound import (
+        UnionBoundCertification,
     )
 
     return (
         RSCertification,
-        SequenceCertification,
+        UnionBoundCertification,
     )

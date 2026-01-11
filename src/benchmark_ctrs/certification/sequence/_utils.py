@@ -1,9 +1,11 @@
+import dataclasses
 from collections.abc import Iterable
 from heapq import heapify, heappop, heappush
-from typing import NamedTuple, NewType, Union
+from typing import Any, NamedTuple, NewType, Optional, Union
 
 import torch
 from torch import Tensor
+from typing_extensions import Self
 
 from benchmark_ctrs.types import Batch
 
@@ -11,7 +13,7 @@ InputId = NewType("InputId", int)
 BatchIndex = NewType("BatchIndex", int)
 
 
-class _QueueItem(NamedTuple):
+class QueueItem(NamedTuple):
     cnt: int
     id: InputId
 
@@ -35,7 +37,7 @@ class SamplingQueue:
         }
         self.batch_ids: dict[BatchIndex, InputId] = {}
 
-        self.heap: list[_QueueItem] = [_QueueItem(0, i) for i in self.input_ids]
+        self.heap: list[QueueItem] = [QueueItem(0, i) for i in self.input_ids]
         heapify(self.heap)
 
         X = []
@@ -52,7 +54,7 @@ class SamplingQueue:
             if targets is not None:
                 y.append(targets[item.id].item())
 
-            heappush(self.heap, _QueueItem(item.cnt + 1, item.id))
+            heappush(self.heap, QueueItem(item.cnt + 1, item.id))
         self.X = torch.stack(X)
         self.y = None
         if targets is not None:
@@ -85,4 +87,32 @@ class SamplingQueue:
             else:
                 k = self.batch_indices[next_item.id][0]
                 X[j], y[j] = X[k], y[k]
-            heappush(self.heap, _QueueItem(next_item.cnt + 1, next_item.id))
+            heappush(self.heap, QueueItem(next_item.cnt + 1, next_item.id))
+
+
+@dataclasses.dataclass(frozen=True)
+class RunningTrial:
+    num_samples: int
+    countA: int
+    pA: Optional[float] = None
+    finished: bool = False
+
+    @classmethod
+    def create_initial(cls, *args: Any, **kwargs: Any) -> "Self":
+        return cls(0, 0, *args, **kwargs)
+
+    def add_sample(self, *, correct: bool) -> "Self":
+        return dataclasses.replace(
+            self,
+            num_samples=self.num_samples + 1,
+            countA=self.countA + correct,
+        )
+
+    def update_pA(self, pA: Optional[float]) -> "Self":
+        final_pA = pA
+        if pA is not None and self.pA is not None:
+            final_pA = min(pA, self.pA)
+        return dataclasses.replace(self, pA=final_pA)
+
+    def done(self) -> "Self":
+        return dataclasses.replace(self, finished=True)
