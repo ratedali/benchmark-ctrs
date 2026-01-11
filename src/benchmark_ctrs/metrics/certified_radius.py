@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Any, ClassVar, Literal, NamedTuple, Optional, Union, cast
+from typing import Any, ClassVar, Literal, NamedTuple, Optional, Union
 
 import torch
 from lightning.pytorch.utilities import LightningEnum
