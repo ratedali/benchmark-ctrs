@@ -80,13 +80,15 @@ class SamplingQueue:
             self.batch_indices[next_item.id].append(j)
             self.batch_ids[j] = next_item.id
 
-            inputs, targets = self.data[:2]
-            X, y = self.batch
             if next_item.cnt == 0:
-                X[j], y[j] = inputs[next_item.id, ...], targets[next_item.id]
+                self.X[j] = self.data[0][next_item.id, ...]
+                if self.y is not None:
+                    self.y[j] = self.data[1][next_item.id]
             else:
                 k = self.batch_indices[next_item.id][0]
-                X[j], y[j] = X[k], y[k]
+                self.X[j] = self.X[k]
+                if self.y is not None:
+                    self.y[j] = self.y[k]
             heappush(self.heap, QueueItem(next_item.cnt + 1, next_item.id))
 
 

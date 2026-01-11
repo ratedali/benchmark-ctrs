@@ -3,4 +3,4 @@ Train, test and compare certified training for randmoized smoothing robsutness
 certification against standard benchmarks.
 """
 
-__version__ = "10.3.0"
+__version__ = "10.3.1"
