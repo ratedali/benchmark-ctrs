@@ -1,6 +1,5 @@
-import math
 from abc import ABC, abstractmethod
-from typing import Generic, Optional, TypeVar, cast
+from typing import Generic, TypeVar, cast
 
 import numpy as np
 import torch
@@ -27,15 +26,17 @@ class SequenceCertification(CertificationMethod, ABC, Generic[_TTrial]):
         n: int = 100000,
         batch_size: int = 10000,
         *,
-        stop_on_plateu: bool = False,
-        stop_tol: float = 0.001,
+        early_stopping: bool = False,
+        patience: int = 5000,
+        mindelta: float = 0.0001,
     ) -> None:
         super().__init__()
         self.n0 = n0
         self.n = n
         self.batch_size = batch_size
-        self.stop_on_plateu = stop_on_plateu
-        self.stop_tol = stop_tol
+        self.early_stopping = early_stopping
+        self.patience = patience
+        self.mindelta = mindelta
 
     @override
     def predict(
@@ -138,33 +139,23 @@ class SequenceCertification(CertificationMethod, ABC, Generic[_TTrial]):
                     queue.new[batch_idx] = False
                     continue
 
-                input_id = queue.batch_ids[batch_idx]
                 cA = int(y[batch_idx].item())
-                trials[input_id] = trials[input_id].add_sample(pred, cA)
+                input_id = queue.batch_ids[batch_idx]
 
-                update = self.update_trial(
-                    trials[input_id], pred=pred, y=cA, alpha=alpha
+                trial = self.update_trial(
+                    trials[input_id].add_sample(pred, cA),
+                    pred=pred,
+                    y=cA,
+                    alpha=alpha,
                 )
-                if update is not None:
-                    pA = trials[input_id].pA
-                    stop = (
-                        self.stop_on_plateu
-                        and pA is not None
-                        and update.pA is not None
-                        and math.isclose(
-                            pA,
-                            update.pA,
-                            abs_tol=self.stop_tol,
-                        )
-                    )
-                    trials[input_id] = update.mark_done(is_done=stop)
 
-                if trials[input_id].done or trials[input_id].num_samples >= self.n:
-                    results[input_id] = self.get_certificate(
-                        trials[input_id],
-                        y=cA,
-                        sigma=sigma,
-                    )
+                if self.early_stopping:
+                    trial = trial.check_stopping(self.patience, self.mindelta)
+
+                trials[input_id] = trial
+
+                if trial.done or trial.num_samples >= self.n:
+                    results[input_id] = self.get_certificate(trial, y=cA, sigma=sigma)
 
                 if input_id in results:
                     done += 1
@@ -184,7 +175,7 @@ class SequenceCertification(CertificationMethod, ABC, Generic[_TTrial]):
         pred: int,
         y: int,
         alpha: float,
-    ) -> Optional[_TTrial]: ...
+    ) -> _TTrial: ...
 
     def estimate_cA(self, model: Classifier, inputs: Tensor, sigma: float) -> Tensor:
         trials: dict[InputId, tuple[int, list[int]]] = {}
@@ -237,7 +228,7 @@ class SequenceCertification(CertificationMethod, ABC, Generic[_TTrial]):
         sigma: float,
     ) -> Certificate:
         pA = trial.pA
-        if pA is None:
+        if pA < 0.5:  # noqa: PLR2004
             return Certificate(_ABSTAIN, 0.0)
         radius = sigma * cast("float", norm.ppf(pA).item())
         return Certificate(y, radius, pA=pA)

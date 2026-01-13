@@ -96,8 +96,10 @@ class SamplingQueue:
 class RunningTrial:
     num_samples: int
     countA: int
-    pA: Optional[float] = None
+    pA: float = 0.0
     done: bool = False
+    stopping_val: float = 0.0
+    stopping_n: int = 0
 
     @classmethod
     def create_initial(cls, *args: Any, **kwargs: Any) -> "Self":
@@ -110,13 +112,21 @@ class RunningTrial:
             countA=self.countA + (pred == y),
         )
 
-    def update_pA(self, pA: Optional[float]) -> "Self":
-        final_pA = pA
-        if pA is not None and self.pA is not None:
-            final_pA = max(pA, self.pA)
-        return dataclasses.replace(self, pA=final_pA)
+    def update_pA(self, pA: float) -> "Self":
+        return dataclasses.replace(self, pA=max(pA, self.pA))
 
-    def mark_done(self, *, is_done: bool = True) -> "Self":
-        if not is_done:
-            return self
+    def mark_done(self) -> "Self":
         return dataclasses.replace(self, done=True)
+
+    def check_stopping(self, patience: int, delta: float) -> "Self":
+        if self.pA - self.stopping_val > delta:
+            return dataclasses.replace(
+                self,
+                stopping_val=self.pA,
+                stopping_n=self.num_samples,
+            )
+
+        if self.num_samples - self.stopping_n > patience:
+            return self.mark_done()
+
+        return self

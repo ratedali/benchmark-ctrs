@@ -1,4 +1,4 @@
-from typing import Optional, cast
+from typing import cast
 
 import numpy as np
 from scipy.stats import binom
@@ -22,7 +22,13 @@ class UBCertification(SequenceCertification[RunningTrial]):
         alpha: float,
     ) -> None:
         super().pre_certify(model, data, sigma, alpha)
-        self.lo, self.hi, self.alphas = _ub_thresholds(alpha=alpha, n=self.n)
+        alpha_t = _alpha_t(alpha, self.n)
+        t = len(alpha_t)
+        while t > 0:
+            t -= 1
+            if alpha_t[t] > 0:
+                break
+        self.alpha_t = alpha_t[:t]
 
     @override
     def empty_trial(self) -> RunningTrial:
@@ -35,27 +41,35 @@ class UBCertification(SequenceCertification[RunningTrial]):
         pred: int,
         y: int,
         alpha: float,
-    ) -> Optional[RunningTrial]:
+    ) -> RunningTrial:
         A = trial.countA
         N = trial.num_samples
-        alpha_t = self.alphas.get(N)
 
-        if self.n <= N:
+        if len(self.alpha_t) <= N:
             return trial.mark_done()
 
-        if self.lo[N] == A:
-            return trial.update_pA(None).mark_done()
-
-        if alpha_t is not None and self.hi[N] <= A:
+        alpha_t = self.alpha_t[N]
+        if alpha_t > 0:
             pA = _lower_conf_bound(A, N, alpha_t)
             return trial.update_pA(pA)
 
-        return None
+        return trial
 
 
 def _lower_conf_bound(x: int, n: int, alpha: float) -> float:
     ci_low = proportion_confint(x, n, alpha=2 * alpha, method="beta")[0]
     return cast("float", ci_low)
+
+
+def _alpha_t(alpha: float, n: int = 100_000, beta: float = 1.1, kinit: int = 11):
+    k = kinit
+    alpha_t = [0.0] * (n + 1)
+    for t in range(1, n):
+        if t > beta**k:
+            k += 1
+            k_t = k - kinit
+            alpha_t[t] = 5 * alpha / (k_t + 4) / (k_t + 5)
+    return alpha_t
 
 
 def _ub_thresholds(alpha: float, targetp: float = 0.5, n: int = 100_000):

@@ -1,6 +1,7 @@
 import dataclasses
-from math import ceil, log
-from typing import Optional, cast
+import logging
+from math import log
+from typing import cast
 
 import numpy as np
 from scipy.optimize import bisect
@@ -10,7 +11,8 @@ from benchmark_ctrs.certification.sequence._utils import RunningTrial
 from benchmark_ctrs.certification.sequence.base import (
     SequenceCertification,
 )
-from benchmark_ctrs.types import Batch, Classifier
+
+_logger = logging.getLogger(__name__)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -26,17 +28,6 @@ class BettingTrial(RunningTrial):
 
 class BettingCertification(SequenceCertification[BettingTrial]):
     @override
-    def pre_certify(
-        self,
-        model: Classifier,
-        data: Batch,
-        sigma: float,
-        alpha: float,
-    ) -> None:
-        self.update_steps = _ci_update_steps(n=self.n)
-        self.lo, self.hi = _betting_thresholds(alpha, n=self.n)
-
-    @override
     def empty_trial(self) -> BettingTrial:
         return BettingTrial(0, 0)
 
@@ -47,52 +38,50 @@ class BettingCertification(SequenceCertification[BettingTrial]):
         pred: int,
         y: int,
         alpha: float,
-    ) -> Optional[BettingTrial]:
+    ) -> BettingTrial:
         H = trial.countA
         t = trial.num_samples
-
-        if self.n <= t:
-            return trial.mark_done()
-
-        if self.lo[t] == H:
-            return trial.update_pA(None).mark_done()
 
         x = pred == y
         q_hat = (H + 0.5) / (t + 1)
         logQ = trial.logQ + x * log(q_hat) + (1 - x) * log(1 - q_hat)
-        update = trial.update_logQ(logQ)
+        trial = trial.update_logQ(logQ)
 
-        if self.update_steps[t] and self.hi[t] <= H:
-            tol = 1e-8
-            pA = cast(
-                "float",
-                bisect(
-                    f=_logW(trial.logQ, H, t, alpha),
-                    a=min(H / t, 1 - tol),
-                    b=tol,
-                    xtol=tol,
-                ),
-            )
-            return update.update_pA(pA)
-        return update
+        logW = _logW(logQ, H, t, alpha)
+        a = max(1e-10, trial.pA)
+        b = min(H / t, 1 - 1e-10)
+        if a < b and logW(a) >= 0 and logW(b) < 0:
+            try:
+                pA = cast(
+                    "float",
+                    bisect(
+                        f=logW,
+                        a=a,
+                        b=b,
+                        xtol=1e-8,
+                    ),
+                )
+                return trial.update_pA(pA)
+            except ValueError as err:
+                _logger.warning(
+                    "Error when updating the CI, no values for p are viable"
+                    " betwen (a = %.3e, f(a) = %.3e) and (b = %.3e, f(b) = %.3e)."
+                    " (%s)",
+                    a,
+                    logW(a),
+                    b,
+                    logW(b),
+                    str(err),
+                )
+        return trial
 
 
 def _logW(logQ: float, H: int, t: int, alpha: float):
-    def compute(p: float):
+    def impl(p: float):
         logP = H * log(p) + (t - H) * log(1 - p)
         return logQ - logP - log(1 / (2 * alpha))
 
-    return compute
-
-
-def _ci_update_steps(beta: float = 1.1, kinit: int = 11, n: int = 100_000):
-    should_update = np.zeros(n + 1, dtype=np.bool)
-    kmax = ceil(log(n, beta))
-    powers = np.arange(kinit, kmax)
-    update_at = np.ceil(np.pow(beta, powers)).astype(np.long)
-    should_update[update_at] = True
-    should_update[n] = True
-    return should_update
+    return impl
 
 
 def _betting_thresholds(alpha: float, targetp: float = 0.5, n: int = 100_000):
