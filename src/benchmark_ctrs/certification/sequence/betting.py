@@ -20,10 +20,7 @@ class BettingTrial(RunningTrial):
     logQ: float = 0
 
     def update_logQ(self, logQ: float) -> "Self":
-        return dataclasses.replace(
-            self,
-            logQ=logQ,
-        )
+        return dataclasses.replace(self, logQ=self.logQ + logQ)
 
 
 class BettingCertification(SequenceCertification[BettingTrial]):
@@ -44,10 +41,9 @@ class BettingCertification(SequenceCertification[BettingTrial]):
 
         x = pred == y
         q_hat = (H + 0.5) / (t + 1)
-        logQ = trial.logQ + x * log(q_hat) + (1 - x) * log(1 - q_hat)
-        trial = trial.update_logQ(logQ)
+        trial = trial.update_logQ(x * log(q_hat) + (1 - x) * log(1 - q_hat))
 
-        logW = _logW(logQ, H, t, alpha)
+        logW = _logW(trial.logQ, H, t, alpha)
         a = max(1e-10, trial.pA)
         b = min(H / t, 1 - 1e-10)
         if a < b and logW(a) >= 0 and logW(b) < 0:
