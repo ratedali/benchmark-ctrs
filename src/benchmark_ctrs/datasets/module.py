@@ -13,6 +13,15 @@ from typing_extensions import override
 from benchmark_ctrs.models import Architecture
 
 
+def _get_default_workers(trainer: Optional[L.Trainer] = None) -> int:
+    local_world_size = os.environ.get(
+        "LOCAL_WORLD_SIZE",
+        trainer.world_size // trainer.num_nodes if trainer is not None else 1,
+    )
+
+    return suggested_max_num_workers(int(local_world_size))
+
+
 class BaseDataModule(L.LightningDataModule, ABC):
     __default_cache_dir: ClassVar = Path("datasets_cache")
 
@@ -34,9 +43,7 @@ class BaseDataModule(L.LightningDataModule, ABC):
             BaseDataModule.__default_cache_dir,
         )
 
-        self.workers = workers or suggested_max_num_workers(
-            self.trainer.world_size // self.trainer.num_nodes if self.trainer else 1
-        )
+        self.workers = workers or _get_default_workers()
 
         if validation <= 0:
             raise ValueError("validation must be a non-negative number.")
