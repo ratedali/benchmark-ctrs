@@ -1,20 +1,15 @@
-from typing import Any
-
 from torch.optim import SGD
 from torch.optim.lr_scheduler import StepLR
 from typing_extensions import override
 
-from benchmark_ctrs.modules import BaseHParams, BaseModule
-from benchmark_ctrs.types import Batch, ConfigureOptimizers, StepOutput
+from benchmark_ctrs.modules.standard.module import Standard
+from benchmark_ctrs.types import ConfigureOptimizers
 from benchmark_ctrs.utilities import GradualStepLR
 
 WARMUP_DEPTH_THRESHOLD = 110
 
 
-class CIFARStandard(BaseModule):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, params=BaseHParams(sigma=0), **kwargs)
-
+class CIFARStandard(Standard):
     @override
     def configure_optimizers(self) -> ConfigureOptimizers:
         optimizer = SGD(
@@ -45,34 +40,4 @@ class CIFARStandard(BaseModule):
                 "interval": "epoch",
                 "frequency": 1,
             },
-        }
-
-    @override
-    def training_step(
-        self,
-        batch: Batch,
-        *args: Any,
-        **kwargs: Any,
-    ) -> StepOutput:
-        inputs, targets = batch[:2]
-        predictions = self.forward(inputs)
-        loss = self.criterion(predictions, targets)
-        return {
-            "loss": loss,
-            "predictions": predictions,
-        }
-
-    @override
-    def validation_step(
-        self,
-        batch: Batch,
-        *args: Any,
-        **kwargs: Any,
-    ) -> StepOutput:
-        inputs, targets = batch[:2]
-        predictions = self.forward(inputs)
-        loss = self.criterion(predictions, targets)
-        return {
-            "loss": loss,
-            "predictions": predictions,
         }

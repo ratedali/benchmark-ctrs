@@ -1,49 +1,11 @@
-from typing import Any
 from torch.optim import SGD
 from typing_extensions import override
 
-from benchmark_ctrs.modules import BaseHParams, BaseModule
-from benchmark_ctrs.types import Batch, ConfigureOptimizers, StepOutput
+from benchmark_ctrs.modules.standard.module import Standard
+from benchmark_ctrs.types import ConfigureOptimizers
 
 
-class MNISTStandard(BaseModule):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(
-            *args,
-            params=BaseHParams(sigma=0.0),
-            **kwargs,
-        )
-
+class MNISTStandard(Standard):
     @override
     def configure_optimizers(self) -> ConfigureOptimizers:
         return SGD(self.parameters(), lr=0.1)
-
-    @override
-    def training_step(
-        self,
-        batch: Batch,
-        *args: Any,
-        **kwargs: Any,
-    ) -> StepOutput:
-        inputs, targets = batch[:2]
-        predictions = self.forward(inputs)
-        loss = self.criterion(predictions, targets)
-        return {
-            "loss": loss,
-            "predictions": predictions,
-        }
-
-    @override
-    def validation_step(
-        self,
-        batch: Batch,
-        *args: Any,
-        **kwargs: Any,
-    ) -> StepOutput:
-        inputs, targets = batch[:2]
-        predictions = self.forward(inputs)
-        loss = self.criterion(predictions, targets)
-        return {
-            "loss": loss,
-            "predictions": predictions,
-        }
