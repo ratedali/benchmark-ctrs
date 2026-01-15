@@ -6,7 +6,7 @@ from typing import Any, Literal, Optional, Union, cast
 import lightning as L
 import torch
 from lightning.pytorch.loggers import TensorBoardLogger
-from lightning.pytorch.utilities import grad_norm
+from lightning.pytorch.utilities import grad_norm, rank_zero_only
 from lightning.pytorch.utilities.types import STEP_OUTPUT
 from torch import Tensor, nn
 from torch.optim import SGD
@@ -383,6 +383,7 @@ class BaseModule(L.LightningModule):
             result["certification"] = cert
         return result
 
+    @rank_zero_only
     def log_grad_norms(self, norm_type: Union[float, str] = 2) -> None:
         """Utility to compute and log grad norms.
 
@@ -392,16 +393,17 @@ class BaseModule(L.LightningModule):
         Needs to be called manually, when using manual
         optimization.
         """
+        total_key = f"grad_{norm_type}_norm_total"
         norms = grad_norm(self.model, norm_type=norm_type)
         self.log(
             "backprop/grad_l2_norm_total",
-            norms.pop("grad_2.0_norm_total", 0.0),
+            norms.get(total_key, 0.0),
         )
 
         if isinstance(self.logger, TensorBoardLogger):
             tensorboard = cast("SummaryWriter", self.logger.experiment)
             tensorboard.add_histogram(
                 tag="backprop/grad_l2_norms",
-                values=torch.tensor(list(norms.values())),
+                values=torch.tensor([v for k, v in norms.items() if k != total_key]),
                 global_step=self.trainer.global_step,
             )
