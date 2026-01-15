@@ -40,24 +40,35 @@ class ImageNet(BaseDataModule):
             ],
         )
 
+    def prepare_data(self) -> None:
+        imagenet.ImageNet(self.cache_dir, split="train")
+        imagenet.ImageNet(self.cache_dir, split="val")
+
     def setup(self, stage: str) -> None:
         if stage == "fit":
-            self._train, self._val = random_split(
-                dataset=imagenet.ImageNet(
-                    self._cache_dir,
-                    split="train",
-                    transform=self.__train_transforms,
-                ),
-                lengths=(1280167, 1000),
+            dataset = imagenet.ImageNet(
+                self.cache_dir,
+                split="train",
+                transform=self.__train_transforms,
             )
-        elif stage == "test":
-            self._test = imagenet.ImageNet(
-                self._cache_dir, split="val", transform=self.__test_transforms
+            if self.validation > 0:
+                total = len(dataset) if isinstance(self.validation, int) else 1.0
+                self._train, self._val = random_split(
+                    dataset=dataset,
+                    lengths=(total - self.validation, self.validation),
+                )
+            else:
+                self._train = dataset
+        else:
+            dataset = imagenet.ImageNet(
+                self.cache_dir,
+                split="val",
+                transform=self.__test_transforms,
             )
-        elif stage == "predict":
-            self._predict = imagenet.ImageNet(
-                self._cache_dir, split="val", transform=self.__test_transforms
-            )
+            if stage == "test":
+                self._test = dataset
+            elif stage == "predict":
+                self._predict = dataset
 
     @property
     @override

@@ -1,9 +1,11 @@
+import os
 from abc import ABC, abstractmethod
 from collections.abc import Sized
 from pathlib import Path
-from typing import Any, ClassVar, Optional
+from typing import Any, ClassVar, Optional, Union
 
 import lightning as L
+from lightning.pytorch.utilities import suggested_max_num_workers
 from lightning.pytorch.utilities.types import EVAL_DATALOADERS, TRAIN_DATALOADERS
 from torch.utils.data import DataLoader, Dataset
 from typing_extensions import override
@@ -20,13 +22,29 @@ class BaseDataModule(L.LightningDataModule, ABC):
         self,
         *,
         batch_size: int,
-        workers: int = 4,
+        validation: Union[int, float],
+        workers: Optional[int] = None,
         cache_dir: Optional[Path] = None,
         with_ids: bool = False,
         shuffle_train: bool = True,
     ):
         super().__init__()
-        self._cache_dir = cache_dir or BaseDataModule.__default_cache_dir
+        self.cache_dir = cache_dir or os.environ.get(
+            "DATASETS_CACHE",
+            BaseDataModule.__default_cache_dir,
+        )
+
+        self.workers = workers or suggested_max_num_workers(
+            self.trainer.world_size // self.trainer.num_nodes if self.trainer else 1
+        )
+
+        if validation <= 0:
+            raise ValueError("validation must be a non-negative number.")
+        if isinstance(validation, float) and validation > 1:
+            raise ValueError("validation cannot be a float greater than 1.")
+
+        self.validation = validation
+
         self.save_hyperparameters(ignore="cache_dir")
 
         self._train: Optional[Dataset] = None
@@ -49,14 +67,14 @@ class BaseDataModule(L.LightningDataModule, ABC):
     @override
     def train_dataloader(self) -> TRAIN_DATALOADERS:
         if (dataset := self._train) is None:
-            raise ValueError("Training split not initialized")
+            raise RuntimeError("Training split not initialized")
         if self.hparams["with_ids"]:
             dataset = _WithIdDatasetWrapper(dataset)
 
         return DataLoader(
             dataset,
             batch_size=self.hparams["batch_size"],
-            num_workers=self.hparams["workers"],
+            num_workers=self.workers,
             pin_memory=True,
             persistent_workers=True,
             shuffle=self.hparams["shuffle_train"],
@@ -65,14 +83,14 @@ class BaseDataModule(L.LightningDataModule, ABC):
     @override
     def val_dataloader(self) -> EVAL_DATALOADERS:
         if (dataset := self._val) is None:
-            raise ValueError("Validation split not initialized")
+            raise RuntimeError("Validation split not initialized")
         if self.hparams["with_ids"]:
             dataset = _WithIdDatasetWrapper(dataset)
 
         return DataLoader(
             dataset,
             batch_size=self.hparams["batch_size"],
-            num_workers=self.hparams["workers"],
+            num_workers=self.workers,
             pin_memory=True,
             persistent_workers=True,
         )
@@ -80,14 +98,14 @@ class BaseDataModule(L.LightningDataModule, ABC):
     @override
     def test_dataloader(self) -> EVAL_DATALOADERS:
         if (dataset := self._test) is None:
-            raise ValueError("Testing split not initialized")
+            raise RuntimeError("Testing split not initialized")
         if self.hparams["with_ids"]:
             dataset = _WithIdDatasetWrapper(dataset)
 
         return DataLoader(
             dataset,
             batch_size=self.hparams["batch_size"],
-            num_workers=self.hparams["workers"],
+            num_workers=self.workers,
             pin_memory=True,
             persistent_workers=True,
         )
@@ -102,7 +120,7 @@ class BaseDataModule(L.LightningDataModule, ABC):
         return DataLoader(
             dataset,
             batch_size=self.hparams["batch_size"],
-            num_workers=self.hparams["workers"],
+            num_workers=self.workers,
             pin_memory=True,
             persistent_workers=True,
         )

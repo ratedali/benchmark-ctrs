@@ -20,21 +20,26 @@ class MNIST(BaseDataModule):
         self.name = "mnist"
 
     def prepare_data(self) -> None:
-        mnist.MNIST(self._cache_dir, train=True, download=True)
-        mnist.MNIST(self._cache_dir, train=False, download=True)
+        mnist.MNIST(self.cache_dir, train=True, download=True)
+        mnist.MNIST(self.cache_dir, train=False, download=True)
 
     def setup(self, stage: str) -> None:
         if stage == "fit":
-            self._train, self._val = random_split(
-                dataset=mnist.MNIST(self._cache_dir, train=True, transform=ToTensor()),
-                lengths=(59000, 1000),
-            )
-        elif stage == "test":
-            self._test = mnist.MNIST(self._cache_dir, train=False, transform=ToTensor())
-        elif stage == "predict":
-            self._predict = mnist.MNIST(
-                self._cache_dir, train=False, transform=ToTensor()
-            )
+            dataset = mnist.MNIST(self.cache_dir, train=True, transform=ToTensor())
+            if self.validation > 0:
+                total = len(dataset) if isinstance(self.validation, int) else 1.0
+                self._train, self._val = random_split(
+                    dataset=dataset,
+                    lengths=(total - self.validation, self.validation),
+                )
+            else:
+                self._train = dataset
+        else:
+            dataset = mnist.MNIST(self.cache_dir, train=False, transform=ToTensor())
+            if stage == "test":
+                self._test = dataset
+            elif stage == "predict":
+                self._predict = dataset
 
     @property
     @override

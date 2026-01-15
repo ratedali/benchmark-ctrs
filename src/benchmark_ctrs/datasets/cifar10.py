@@ -20,33 +20,38 @@ class CIFAR10(BaseDataModule):
         self.name = "cifar10"
 
     def prepare_data(self) -> None:
-        cifar.CIFAR10(self._cache_dir, train=True, download=True)
-        cifar.CIFAR10(self._cache_dir, train=False, download=True)
+        cifar.CIFAR10(self.cache_dir, train=True, download=True)
+        cifar.CIFAR10(self.cache_dir, train=False, download=True)
 
     def setup(self, stage: str) -> None:
         if stage == "fit":
-            self._train, self._val = random_split(
-                dataset=cifar.CIFAR10(
-                    self._cache_dir,
-                    train=True,
-                    transform=Compose(
-                        [
-                            RandomCrop(32, padding=4),
-                            RandomHorizontalFlip(),
-                            ToTensor(),
-                        ]
-                    ),
+            dataset = cifar.CIFAR10(
+                self.cache_dir,
+                train=True,
+                transform=Compose(
+                    [
+                        RandomCrop(32, padding=4),
+                        RandomHorizontalFlip(),
+                        ToTensor(),
+                    ]
                 ),
-                lengths=(49000, 1000),
             )
-        elif stage == "test":
-            self._test = cifar.CIFAR10(
-                self._cache_dir, train=False, transform=ToTensor()
+            if self.validation > 0:
+                total = len(dataset) if isinstance(self.validation, int) else 1.0
+                self._train, self._val = random_split(
+                    dataset=dataset,
+                    lengths=(total - self.validation, self.validation),
+                )
+        else:
+            dataset = cifar.CIFAR10(
+                self.cache_dir,
+                train=False,
+                transform=ToTensor(),
             )
-        elif stage == "predict":
-            self._predict = cifar.CIFAR10(
-                self._cache_dir, train=False, transform=ToTensor()
-            )
+            if stage == "test":
+                self._test = dataset
+            elif stage == "predict":
+                self._predict = dataset
 
     @property
     @override
