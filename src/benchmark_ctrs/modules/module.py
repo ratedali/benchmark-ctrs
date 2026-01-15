@@ -138,8 +138,11 @@ class BaseModule(L.LightningModule):
             prefix="train/",
         )
         self.metric_loss_train = MeanMetric(nan_strategy="error")
+
+        self._batch_cuda_events: Optional[tuple[torch.cuda.Event, ...]] = None
         self.metric_batch_time = MeanMetric(nan_strategy="error")
         self.metric_epoch_time = SumMetric(nan_strategy="error")
+        self.metric_gpu_memory = MeanMetric(nan_strategy="error")
 
         self.metric_acc_val = self.metric_acc_train.clone(prefix="val/")
         self.metric_loss_val = MeanMetric(nan_strategy="error")
@@ -211,7 +214,7 @@ class BaseModule(L.LightningModule):
                 for key in ("time/iteration", "train/loss")
                 for suffix in ("epoch", "step")
             ]
-            keys.extend(["time/epoch"])
+            keys.extend(["time/epoch", "train/gpu_memory"])
             metrics = dict.fromkeys(
                 chain(
                     keys,
@@ -227,6 +230,11 @@ class BaseModule(L.LightningModule):
     def on_train_batch_start(self, batch: Batch, batch_idx: int) -> Optional[int]:
         super().on_train_batch_start(batch, batch_idx)
         self._batch_start = time.perf_counter()
+        if torch.cuda.is_available():
+            start = cast("torch.cuda.Event", torch.cuda.Event(enable_timing=True))
+            end = cast("torch.cuda.Event", torch.cuda.Event(enable_timing=True))
+            self._batch_cuda_events = (start, end)
+            start.record()
 
     @override
     def on_train_batch_end(
@@ -242,7 +250,17 @@ class BaseModule(L.LightningModule):
                 f"'loss' and 'predictions', got value: {outputs}"
             )
 
-        iteration_time = time.perf_counter() - self._batch_start
+        if self._batch_cuda_events:
+            start, end = self._batch_cuda_events
+            torch.cuda.synchronize()
+            end.record()
+            iteration_time = start.elapsed_time(end) / 1000.0
+
+            self.metric_gpu_memory(torch.cuda.memory_allocated())
+            self.log("train/gpu_memory", self.metric_gpu_memory)
+        else:
+            iteration_time = time.perf_counter() - self._batch_start
+
         self.metric_batch_time(iteration_time)
         self.metric_epoch_time.update(iteration_time)
         self.log("time/iteration", self.metric_batch_time, on_epoch=True)
