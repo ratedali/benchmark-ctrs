@@ -43,7 +43,7 @@ class BaseDataModule(L.LightningDataModule, ABC):
             BaseDataModule.__default_cache_dir,
         )
 
-        self.workers = workers or _get_default_workers()
+        self.workers = workers if workers is not None else _get_default_workers()
 
         if validation <= 0:
             raise ValueError("validation must be a non-negative number.")
