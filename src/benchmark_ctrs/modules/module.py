@@ -252,8 +252,8 @@ class BaseModule(L.LightningModule):
 
         if self._batch_cuda_events:
             start, end = self._batch_cuda_events
-            torch.cuda.synchronize()
             end.record()
+            torch.cuda.synchronize()
             iteration_time = start.elapsed_time(end) / 1000.0
 
             self.metric_gpu_memory(torch.cuda.memory_allocated())
