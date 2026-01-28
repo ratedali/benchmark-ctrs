@@ -8,6 +8,8 @@ from typing_extensions import override
 from benchmark_ctrs.datasets.module import BaseDataModule
 from benchmark_ctrs.models import Architecture
 
+__all__ = ["CIFAR10"]
+
 
 class CIFAR10(BaseDataModule):
     __means: Final = [0.4914, 0.4822, 0.4465]

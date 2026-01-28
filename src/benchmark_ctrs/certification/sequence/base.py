@@ -16,6 +16,8 @@ from benchmark_ctrs.certification.sequence._utils import (
 )
 from benchmark_ctrs.types import Batch, Classifier
 
+__all__ = ["SequenceCertification"]
+
 _TTrial = TypeVar("_TTrial", bound=RunningTrial)
 
 

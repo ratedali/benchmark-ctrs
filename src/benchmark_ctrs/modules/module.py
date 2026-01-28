@@ -1,7 +1,6 @@
-import dataclasses
 import time
 from itertools import chain
-from typing import Any, Literal, Optional, Union, cast
+from typing import Any, Literal, cast
 
 import lightning as L
 import torch
@@ -22,22 +21,22 @@ from typing_extensions import NotRequired, TypedDict, override
 from benchmark_ctrs.certification import CertificationMethod
 from benchmark_ctrs.certification.rs_certification import RSCertification
 from benchmark_ctrs.metrics import certified_radius as cr
-from benchmark_ctrs.models import Architecture, ArchitectureValues
-from benchmark_ctrs.models.cifar_resnet import resnet as cifar_resnet
+from benchmark_ctrs.models import Architecture, ArchitectureOption
 from benchmark_ctrs.models.layers import Normalization
 from benchmark_ctrs.models.lenet import LeNet
+from benchmark_ctrs.models.resnet import cifar_resnet
 from benchmark_ctrs.types import Batch, ConfigureOptimizers, StepOutput
 from benchmark_ctrs.utilities import check_valid_step_output
+
+__all__ = [
+    "BaseModule",
+    "PredictionResult",
+]
 
 
 class PredictionResult(TypedDict, closed=True):
     certification: NotRequired[cr.CertificationResult]
     clean: Tensor
-
-
-@dataclasses.dataclass(frozen=True)
-class HParams:
-    sigma: float
 
 
 class BaseModule(L.LightningModule):
@@ -48,9 +47,8 @@ class BaseModule(L.LightningModule):
     raw_model: nn.Module
     normalization_layer: Normalization
     model: nn.Module
-    criterion: nn.Module
 
-    model_architecture: Architecture
+    model_architecture: Architecture | None
     num_classes: int
     grads_log_interval: int
 
@@ -60,71 +58,79 @@ class BaseModule(L.LightningModule):
     metric_acc_val: MetricCollection
     metric_loss_train: Metric
     metric_loss_val: Metric
-    metric_val_cert: Optional[cr.CertifiedRadius]
-    metric_predict_cert: Optional[cr.CertifiedRadius]
+    metric_val_cert: cr.CertifiedRadius | None
+    metric_predict_cert: cr.CertifiedRadius | None
 
     def __init__(
         self,
+        sigma: float = 0,
         *,
         num_classes: int,
         std: list[float],
         mean: list[float],
-        params: HParams,
-        certification: Union[CertificationMethod, Literal[True], None] = None,
-        certification_params: Optional[cr.Params] = None,
-        arch: Optional[ArchitectureValues] = None,
-        default_arch: ArchitectureValues = "resnet50",
-        criterion: Optional[nn.Module] = None,
+        certification: CertificationMethod | Literal[True] | None = None,
+        certification_params: cr.Params | None = None,
+        arch: ArchitectureOption | str | None = None,
+        default_arch: ArchitectureOption | str = "resnet50",
         grads_log_interval: int = 0,
     ) -> None:
         super().__init__()
-        self.save_hyperparameters(dataclasses.asdict(params))
+        self.sigma = sigma
         self.strict_loading = False
         self.automatic_accuracy = True
 
         self.num_classes = num_classes
         self.grads_log_interval = grads_log_interval
 
-        self.model_architecture = cast(
-            "Architecture",
-            Architecture.from_str(
-                arch or default_arch,
-                source="value",
-            ),
-        )
-        self.criterion = criterion or nn.CrossEntropyLoss(reduction="mean")
-
-        self.init_model(list(mean), list(std))
+        self.init_model(arch or default_arch, list(mean), list(std))
         self.init_metrics(
             certification=certification,
             certification_params=certification_params,
         )
 
-    def init_model(self, mean: list[float], std: list[float]) -> None:
-        if self.model_architecture == Architecture.LeNet:
-            self.raw_model = LeNet()
-        elif self.model_architecture == Architecture.ResNet50:
-            self.raw_model = models.resnet50(
-                weights=None,
-                num_classes=self.num_classes,
-            )
-        elif self.model_architecture.is_cifarresnet:
-            self.raw_model = cifar_resnet(
-                depth=self.model_architecture.resnet_depth, num_classes=self.num_classes
-            )
-        else:
-            raise ValueError(
-                f"Unknown value for arch: {self.model_architecture}. "
-                f"Possible values are: {', '.join(Architecture._member_names_)}"
-            )
+    def init_model(
+        self,
+        architecture: str,
+        mean: list[float],
+        std: list[float],
+    ) -> None:
+        self.model_architecture = cast(
+            "Architecture | None",
+            Architecture.try_from_str(
+                architecture,
+                source="value",
+            ),
+        )
+        if self.model_architecture is not None:
+            if self.model_architecture == Architecture.LeNet:
+                self.raw_model = LeNet()
+            elif self.model_architecture == Architecture.ResNet50:
+                self.raw_model = models.resnet50(
+                    weights=None,
+                    num_classes=self.num_classes,
+                )
+            elif self.model_architecture.is_cifarresnet:
+                self.raw_model = cifar_resnet(
+                    depth=self.model_architecture.resnet_depth,
+                    num_classes=self.num_classes,
+                )
+        if not self.raw_model:
+            try:
+                self.raw_model = models.get_model(architecture)
+            except KeyError as e:
+                raise ValueError(
+                    f"Unknown value for arch: {architecture}. "
+                    f"Possible values are: {', '.join(Architecture._member_names_)} "
+                    "or a valid torchvision model name."
+                ) from e
 
         self.normalization_layer = Normalization(mean=mean, sd=std)
         self.model = torch.nn.Sequential(self.normalization_layer, self.raw_model)
 
     def init_metrics(
         self,
-        certification: Union[cr.CertificationMethod, Literal[True], None],
-        certification_params: Optional[cr.Params],
+        certification: cr.CertificationMethod | Literal[True] | None,
+        certification_params: cr.Params | None,
     ) -> None:
         self.metric_acc_train = MetricCollection(
             {
@@ -139,7 +145,7 @@ class BaseModule(L.LightningModule):
         )
         self.metric_loss_train = MeanMetric(nan_strategy="error")
 
-        self._batch_cuda_events: Optional[tuple[torch.cuda.Event, ...]] = None
+        self._batch_cuda_events: tuple[torch.cuda.Event, ...] | None = None
         self.metric_batch_time = MeanMetric(nan_strategy="error")
         self.metric_epoch_time = SumMetric(nan_strategy="error")
         self.metric_gpu_memory = MeanMetric(nan_strategy="error")
@@ -148,14 +154,13 @@ class BaseModule(L.LightningModule):
         self.metric_loss_val = MeanMetric(nan_strategy="error")
 
         # Setup certified radius metrics
-        sigma = float(self.hparams["sigma"])
-        method: Optional[CertificationMethod] = (
+        method: CertificationMethod | None = (
             RSCertification() if certification is True else certification
         )
 
         self.metric_val_cert = None
         self.metric_predict_cert = None
-        params = certification_params or cr.Params(sigma)
+        params = certification_params or cr.Params(self.sigma)
         if method is not None:
             self.metric_val_cert = cr.CertifiedRadius(
                 self.eval_model,
@@ -227,7 +232,7 @@ class BaseModule(L.LightningModule):
             self.logger.log_hyperparams(dict(self.hparams), metrics)
 
     @override
-    def on_train_batch_start(self, batch: Batch, batch_idx: int) -> Optional[int]:
+    def on_train_batch_start(self, batch: Batch, batch_idx: int) -> int | None:
         super().on_train_batch_start(batch, batch_idx)
         self._batch_start = time.perf_counter()
         if torch.cuda.is_available():
@@ -384,7 +389,7 @@ class BaseModule(L.LightningModule):
         return result
 
     @rank_zero_only
-    def log_grad_norms(self, norm_type: Union[float, str] = 2) -> None:
+    def log_grad_norms(self, norm_type: float | str = 2) -> None:
         """Utility to compute and log grad norms.
 
         It gets called in the before_optimizer_step hook,

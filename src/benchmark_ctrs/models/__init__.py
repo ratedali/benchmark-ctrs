@@ -2,23 +2,33 @@ from typing import Literal
 
 from lightning.pytorch.utilities import LightningEnum
 
-ArchitectureValues = Literal[
+from benchmark_ctrs.models import layers, lenet, resnet
+
+__all__ = [
+    "Architecture",
+    "ArchitectureOption",
+]
+__all__ += resnet.__all__
+__all__ += layers.__all__
+__all__ += lenet.__all__
+
+ArchitectureOption = Literal[
     "lenet",
-    "cifar_resnet20",
-    "cifar_resnet110",
+    "cifar-resnet20",
+    "cifar-resnet110",
     "resnet50",
 ]
 
 
 class Architecture(LightningEnum):
     LeNet = "lenet"
-    CIFARResNet20 = "cifar_resnet20"
-    CIFARResNet110 = "cifar_resnet110"
+    CIFARResNet20 = "cifar-resnet20"
+    CIFARResNet110 = "cifar-resnet110"
     ResNet50 = "resnet50"
 
     @property
     def is_cifarresnet(self) -> bool:
-        return "cifar_resnet" in self.value
+        return "cifar-resnet" in self.value
 
     @property
     def is_resnet(self) -> bool:
@@ -31,13 +41,7 @@ class Architecture(LightningEnum):
                 "Architecture.resnet_depth is only supported on ResNet architectures"
             )
         return {
-            "cifar_resnet20": 20,
+            "cifar-resnet20": 20,
             "resnet50": 50,
-            "cifar_resnet110": 110,
+            "cifar-resnet110": 110,
         }[self.value]
-
-
-__all__ = [
-    "Architecture",
-    "ArchitectureValues",
-]

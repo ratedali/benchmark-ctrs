@@ -1,14 +1,25 @@
 from typing import Any
 
 import torch
+from torch.nn import CrossEntropyLoss
 from torch.profiler import record_function
 from typing_extensions import override
 
-from benchmark_ctrs.modules import BaseModule
+from benchmark_ctrs.modules.module import BaseModule
 from benchmark_ctrs.types import Batch, StepOutput
 
 
 class GaussianAug(BaseModule):
+    def __init__(
+        self,
+        *args: Any,
+        criterion: CrossEntropyLoss | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.save_hyperparameters()
+        self.criterion = criterion or CrossEntropyLoss()
+
     @override
     def training_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput:
         return self.gaussian_aug_step(batch)

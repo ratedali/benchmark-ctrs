@@ -1,10 +1,18 @@
 from abc import ABC, abstractmethod
-from typing import NamedTuple, Optional, Union
+from typing import NamedTuple
 
 from torch import Tensor
 from typing_extensions import TypeIs
 
 from benchmark_ctrs.types import Batch, Classifier
+
+__all__ = [
+    "_ABSTAIN",
+    "Certificate",
+    "CertificationMethod",
+    "Prediction",
+    "is_abstain",
+]
 
 
 class _ABSTAIN_TYPE: ...
@@ -12,7 +20,7 @@ class _ABSTAIN_TYPE: ...
 
 _ABSTAIN = _ABSTAIN_TYPE()
 
-Prediction = Union[int, _ABSTAIN_TYPE]
+Prediction = int | _ABSTAIN_TYPE
 
 
 def is_abstain(prediction: Prediction) -> TypeIs[_ABSTAIN_TYPE]:
@@ -22,8 +30,8 @@ def is_abstain(prediction: Prediction) -> TypeIs[_ABSTAIN_TYPE]:
 class Certificate(NamedTuple):
     prediction: Prediction
     radius: float
-    pA: Optional[float] = None
-    pB: Optional[float] = None
+    pA: float | None = None
+    pB: float | None = None
 
 
 class CertificationMethod(ABC):

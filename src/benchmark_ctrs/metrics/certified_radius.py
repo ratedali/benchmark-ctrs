@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Any, ClassVar, Literal, NamedTuple, Optional, Union
+from typing import Any, ClassVar, Literal, NamedTuple
 
 import torch
 from lightning.pytorch.utilities import LightningEnum
@@ -9,6 +9,8 @@ from torchmetrics.utilities import dim_zero_cat
 from torchmetrics.utilities.exceptions import TorchMetricsUserError
 
 from benchmark_ctrs.certification import CertificationMethod, is_abstain
+
+__all__ = ["CertificationResult", "CertifiedRadius", "Params"]
 
 
 class _Reduction(LightningEnum):
@@ -24,7 +26,7 @@ class Params:
     alpha: float = 0.001
     start: int = 0
     skip: int = 1
-    max_: Union[int, Literal[False]] = False
+    max_: int | Literal[False] = False
 
 
 class CertificationResult(NamedTuple):
@@ -69,7 +71,7 @@ class CertifiedRadius(Metric):
         self._alpha = params.alpha
         self._start = params.start
         self._skip = params.skip
-        self._max: Union[int, Literal[False]] = params.max_
+        self._max: int | Literal[False] = params.max_
         self._model = model
         self._certifier = certifier
         self._reduction = reduction
@@ -103,7 +105,7 @@ class CertifiedRadius(Metric):
             )
 
     @torch.inference_mode()
-    def update(self, inputs: Tensor, targets: Optional[Tensor] = None) -> None:
+    def update(self, inputs: Tensor, targets: Tensor | None = None) -> None:
         indices = torch.arange(
             start=self._start,
             end=self._max if self._max is not False else inputs.size(0),
@@ -162,7 +164,7 @@ class CertifiedRadius(Metric):
             self._predictions.append(predictions)
 
     @torch.inference_mode()
-    def compute(self) -> Union[Tensor, CertificationResult]:
+    def compute(self) -> Tensor | CertificationResult:
         """Compute the certified radius metric value
 
         Returns:

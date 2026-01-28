@@ -15,6 +15,8 @@ from typing_extensions import override
 from benchmark_ctrs.datasets.module import BaseDataModule
 from benchmark_ctrs.models import Architecture
 
+__all__ = ["ImageNet"]
+
 
 class ImageNet(BaseDataModule):
     __means: Final = [0.485, 0.456, 0.406]

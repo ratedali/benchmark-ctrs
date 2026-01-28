@@ -2,7 +2,7 @@ import os
 from abc import ABC, abstractmethod
 from collections.abc import Sized
 from pathlib import Path
-from typing import Any, ClassVar, Optional, Union
+from typing import Any, ClassVar
 
 import lightning as L
 from lightning.pytorch.utilities import suggested_max_num_workers
@@ -12,8 +12,10 @@ from typing_extensions import override
 
 from benchmark_ctrs.models import Architecture
 
+__all__ = ["BaseDataModule"]
 
-def _get_default_workers(trainer: Optional[L.Trainer] = None) -> int:
+
+def _get_default_workers(trainer: L.Trainer | None = None) -> int:
     local_world_size = os.environ.get(
         "LOCAL_WORLD_SIZE",
         trainer.world_size // trainer.num_nodes if trainer is not None else 1,
@@ -25,15 +27,15 @@ def _get_default_workers(trainer: Optional[L.Trainer] = None) -> int:
 class BaseDataModule(L.LightningDataModule, ABC):
     __default_cache_dir: ClassVar = Path("datasets_cache")
 
-    default_arch: ClassVar[Optional[Architecture]] = None
+    default_arch: ClassVar[Architecture | None] = None
 
     def __init__(
         self,
         *,
         batch_size: int,
-        validation: Union[int, float],
-        workers: Optional[int] = None,
-        cache_dir: Optional[Path] = None,
+        validation: int | float = 1000,  # noqa: PYI041
+        workers: int | None = None,
+        cache_dir: Path | None = None,
         with_ids: bool = False,
         shuffle_train: bool = True,
     ):
@@ -54,10 +56,10 @@ class BaseDataModule(L.LightningDataModule, ABC):
 
         self.save_hyperparameters(ignore="cache_dir")
 
-        self._train: Optional[Dataset] = None
-        self._val: Optional[Dataset] = None
-        self._test: Optional[Dataset] = None
-        self._predict: Optional[Dataset] = None
+        self._train: Dataset | None = None
+        self._val: Dataset | None = None
+        self._test: Dataset | None = None
+        self._predict: Dataset | None = None
 
     @property
     @abstractmethod

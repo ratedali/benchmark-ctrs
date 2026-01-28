@@ -5,7 +5,7 @@ from benchmark_ctrs import plugins
 
 @plugins.hookimpl
 def register_callbacks():
-    from benchmark_ctrs.callbacks.certified_radius_writer import (
+    from benchmark_ctrs.callbacks import (
         CertifiedRadiusWriter,
     )
 
@@ -14,9 +14,7 @@ def register_callbacks():
 
 @plugins.hookimpl
 def register_data_modules():
-    from benchmark_ctrs.datasets.cifar10 import CIFAR10
-    from benchmark_ctrs.datasets.imagenet import ImageNet
-    from benchmark_ctrs.datasets.mnist import MNIST
+    from benchmark_ctrs.datasets import CIFAR10, MNIST, ImageNet
 
     return (
         CIFAR10,
@@ -27,13 +25,17 @@ def register_data_modules():
 
 @plugins.hookimpl
 def register_models():
-    from benchmark_ctrs.modules.gaussian_aug import GaussianAug
-    from benchmark_ctrs.modules.standard.cifar import CIFARStandard
-    from benchmark_ctrs.modules.standard.mnist import MNISTStandard
+    from benchmark_ctrs.modules import (
+        CIFARStandard,
+        GaussianAug,
+        ImageNetStandard,
+        MNISTStandard,
+    )
 
     return (
         GaussianAug,
         CIFARStandard,
+        ImageNetStandard,
         MNISTStandard,
     )
 
@@ -51,9 +53,9 @@ def register_lr_schedulers():
 
 @plugins.hookimpl
 def register_certification_methods():
-    from benchmark_ctrs.certification.rs_certification import RSCertification
-    from benchmark_ctrs.certification.sequence.betting import BettingCertification
-    from benchmark_ctrs.certification.sequence.union_bound import (
+    from benchmark_ctrs.certification import (
+        BettingCertification,
+        RSCertification,
         UBCertification,
     )
 

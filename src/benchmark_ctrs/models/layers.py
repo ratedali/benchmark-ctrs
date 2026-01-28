@@ -3,15 +3,18 @@
 #
 # Github Permalink: https://github.com/alinlab/smoothing-catrs/blob/d4bc576e7d373d158f087ba5744af8bb48466bb7/code/datasets.py#L257
 
-from typing import Optional
-
 import torch
+
+__all__ = [
+    "Normalization",
+    "normalize",
+]
 
 
 def normalize(
     x: torch.Tensor,
-    mean: Optional[torch.Tensor] = None,
-    sd: Optional[torch.Tensor] = None,
+    mean: torch.Tensor | None = None,
+    sd: torch.Tensor | None = None,
 ):
     if mean is None:
         mean = torch.tensor([0.0])
@@ -38,8 +41,8 @@ class Normalization(torch.nn.Module):
 
     def __init__(
         self,
-        mean: Optional[list[float]] = None,
-        sd: Optional[list[float]] = None,
+        mean: list[float] | None = None,
+        sd: list[float] | None = None,
     ) -> None:
         super().__init__()
         self.mean: torch.Tensor

@@ -15,6 +15,8 @@ from benchmark_ctrs.certification import (
 )
 from benchmark_ctrs.types import Classifier
 
+__all__ = ["RSCertification"]
+
 
 class RSCertification(CertificationMethod):
     def __init__(

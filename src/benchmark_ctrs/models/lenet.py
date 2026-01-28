@@ -8,6 +8,8 @@ import lightning as L
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+__all__ = ["LeNet"]
+
 
 class LeNet(L.LightningModule):
     def __init__(self):

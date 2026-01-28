@@ -6,6 +6,8 @@ from typing_extensions import override
 from benchmark_ctrs.modules.standard.module import Standard
 from benchmark_ctrs.types import ConfigureOptimizers
 
+__all__ = ["ImageNetStandard"]
+
 
 class ImageNetStandard(Standard):
     @override

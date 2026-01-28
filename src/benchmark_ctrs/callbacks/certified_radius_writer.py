@@ -1,13 +1,15 @@
 from collections.abc import Sequence
 from csv import DictWriter
 from pathlib import Path
-from typing import Any, Final, Optional, cast
+from typing import Any, Final, cast
 
 import lightning as L
 from lightning.pytorch.callbacks import BasePredictionWriter
 from typing_extensions import override
 
 from benchmark_ctrs.modules.module import BaseModule, Batch, PredictionResult
+
+__all__ = ["CERT_FIELDS", "CLEAN_FIELDS", "CertifiedRadiusWriter"]
 
 CERT_FIELDS: Final = ("idx", "label", "predict", "radius", "correct")
 CLEAN_FIELDS: Final = ("idx", "label", "predict", "correct")
@@ -16,7 +18,7 @@ CLEAN_FIELDS: Final = ("idx", "label", "predict", "correct")
 class CertifiedRadiusWriter(BasePredictionWriter):
     def __init__(
         self,
-        outdir: Optional[str] = None,
+        outdir: str | None = None,
         filename: str = "cert.csv",
         clean_filename: str = "clean.csv",
         *,
@@ -60,7 +62,7 @@ class CertifiedRadiusWriter(BasePredictionWriter):
         trainer: L.Trainer,
         pl_module: L.LightningModule,
         prediction: PredictionResult,
-        batch_indices: Optional[Sequence[int]],
+        batch_indices: Sequence[int] | None,
         batch: Batch,
         *args: Any,
         **kwargs: Any,

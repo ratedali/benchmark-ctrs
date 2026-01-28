@@ -11,6 +11,8 @@ from benchmark_ctrs.certification.sequence.base import (
 )
 from benchmark_ctrs.types import Batch, Classifier
 
+__all__ = ["UBCertification"]
+
 
 class UBCertification(SequenceCertification[RunningTrial]):
     @override

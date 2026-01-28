@@ -1,14 +1,24 @@
 from typing import Any
 
+from torch.nn import CrossEntropyLoss
 from typing_extensions import override
 
-from benchmark_ctrs.modules import BaseHParams, BaseModule
+from benchmark_ctrs.modules.module import BaseModule
 from benchmark_ctrs.types import Batch, StepOutput
+
+__all__ = ["Standard"]
 
 
 class Standard(BaseModule):
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs, params=BaseHParams(sigma=0.0))
+    def __init__(
+        self,
+        *args: Any,
+        criterion: CrossEntropyLoss | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.save_hyperparameters()
+        self.criterion = criterion or CrossEntropyLoss()
 
     @override
     def training_step(self, batch: Batch, *args: Any, **kwargs: Any) -> StepOutput:

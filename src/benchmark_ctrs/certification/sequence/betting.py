@@ -12,6 +12,8 @@ from benchmark_ctrs.certification.sequence.base import (
     SequenceCertification,
 )
 
+__all__ = ["BettingCertification"]
+
 _logger = logging.getLogger(__name__)
 
 

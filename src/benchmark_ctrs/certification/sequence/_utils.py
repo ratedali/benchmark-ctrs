@@ -1,13 +1,21 @@
 import dataclasses
 from collections.abc import Iterable
 from heapq import heapify, heappop, heappush
-from typing import Any, NamedTuple, NewType, Optional, Union
+from typing import Any, NamedTuple, NewType
 
 import torch
 from torch import Tensor
 from typing_extensions import Self
 
 from benchmark_ctrs.types import Batch
+
+__all__ = [
+    "BatchIndex",
+    "InputId",
+    "QueueItem",
+    "RunningTrial",
+    "SamplingQueue",
+]
 
 InputId = NewType("InputId", int)
 BatchIndex = NewType("BatchIndex", int)
@@ -19,7 +27,7 @@ class QueueItem(NamedTuple):
 
 
 class SamplingQueue:
-    def __init__(self, batch_size: int, data: Union[Tensor, Batch]) -> None:
+    def __init__(self, batch_size: int, data: Tensor | Batch) -> None:
         self.batch_size: int = batch_size
         self.data = data
 
@@ -65,7 +73,7 @@ class SamplingQueue:
         }
 
     @property
-    def batch(self) -> Union[Tensor, Batch]:
+    def batch(self) -> Tensor | Batch:
         if self.y is not None:
             return self.X, self.y
         return self.X

@@ -1,5 +1,5 @@
 from collections.abc import Callable, Iterable, Sequence
-from typing import Any, Optional, Union
+from typing import Any, TypeAlias
 
 from lightning.pytorch.utilities.types import (
     LRSchedulerConfig,
@@ -11,31 +11,15 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
 from typing_extensions import NotRequired, TypedDict
 
-ConfigureOptimizers = Union[
-    Optimizer,
-    Sequence[Optimizer],
-    tuple[
-        Sequence[Optimizer],
-        Sequence[
-            Union[
-                LRScheduler,
-                ReduceLROnPlateau,
-                LRSchedulerConfig,
-            ]
-        ],
-    ],
-    OptimizerConfig,
-    OptimizerLRSchedulerConfig,
-    Sequence[OptimizerConfig],
-    Sequence[OptimizerLRSchedulerConfig],
-    None,
+__all__ = [
+    "Batch",
+    "Classifier",
+    "ConfigureOptimizers",
+    "DictStepOutput",
+    "LRSchedulerCallable",
+    "OptimizerCallable",
+    "StepOutput",
 ]
-
-Classifier = Callable[[Tensor], Tensor]
-OptimizerCallable = Callable[[Iterable[Any]], Optimizer]
-LRSchedulerCallable = Callable[[Optimizer], Union[LRScheduler, ReduceLROnPlateau]]
-
-Batch = tuple[Tensor, ...]
 
 
 class DictStepOutput(TypedDict, extra_items=Any):
@@ -43,4 +27,23 @@ class DictStepOutput(TypedDict, extra_items=Any):
     predictions: NotRequired[Tensor]
 
 
-StepOutput = Optional[DictStepOutput]
+ConfigureOptimizers: TypeAlias = (
+    Optimizer
+    | Sequence[Optimizer]
+    | tuple[
+        Sequence[Optimizer],
+        Sequence[LRScheduler | ReduceLROnPlateau | LRSchedulerConfig],
+    ]
+    | OptimizerConfig
+    | OptimizerLRSchedulerConfig
+    | Sequence[OptimizerConfig]
+    | Sequence[OptimizerLRSchedulerConfig]
+    | None
+)
+
+
+Classifier: TypeAlias = Callable[[Tensor], Tensor]
+OptimizerCallable: TypeAlias = Callable[[Iterable[Any]], Optimizer]
+LRSchedulerCallable: TypeAlias = Callable[[Optimizer], LRScheduler | ReduceLROnPlateau]
+Batch: TypeAlias = tuple[Tensor, ...]
+StepOutput: TypeAlias = DictStepOutput | None

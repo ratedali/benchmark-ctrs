@@ -4,9 +4,9 @@
 
 import math
 
-import torch.nn as nn
+from torch import nn
 
-__all__ = ["resnet"]
+__all__ = ["CIFARResNet", "cifar_resnet"]
 
 
 def conv3x3(in_planes, out_planes, stride=1):
@@ -88,7 +88,7 @@ class Bottleneck(nn.Module):
         return out
 
 
-class ResNet(nn.Module):
+class CIFARResNet(nn.Module):
     def __init__(self, depth, num_classes=1000, block_name="BasicBlock"):
         super().__init__()
         # Model type specifies number of layers for CIFAR-10 model
@@ -165,8 +165,8 @@ class ResNet(nn.Module):
         return x
 
 
-def resnet(**kwargs):
+def cifar_resnet(**kwargs):
     """
     Constructs a ResNet model.
     """
-    return ResNet(**kwargs)
+    return CIFARResNet(**kwargs)

@@ -6,7 +6,9 @@ from benchmark_ctrs.modules.standard.module import Standard
 from benchmark_ctrs.types import ConfigureOptimizers
 from benchmark_ctrs.utilities import GradualStepLR
 
-WARMUP_DEPTH_THRESHOLD = 110
+__all__ = ["CIFAR_RESNET_DEPTH_WARMUP", "CIFARStandard"]
+
+CIFAR_RESNET_DEPTH_WARMUP = 110
 
 
 class CIFARStandard(Standard):
@@ -21,7 +23,7 @@ class CIFARStandard(Standard):
 
         if (
             self.model_architecture.is_resnet
-            and self.model_architecture.resnet_depth >= WARMUP_DEPTH_THRESHOLD
+            and self.model_architecture.resnet_depth >= CIFAR_RESNET_DEPTH_WARMUP
         ):
             lr_scheduler = GradualStepLR(
                 optimizer,
