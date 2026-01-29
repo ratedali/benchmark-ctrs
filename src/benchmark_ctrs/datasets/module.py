@@ -16,12 +16,19 @@ __all__ = ["BaseDataModule"]
 
 
 def _get_default_workers(trainer: L.Trainer | None = None) -> int:
-    local_world_size = os.environ.get(
-        "LOCAL_WORLD_SIZE",
-        trainer.world_size // trainer.num_nodes if trainer is not None else 1,
+    local_world_size = int(
+        os.environ.get(
+            "LOCAL_WORLD_SIZE",
+            trainer.world_size // trainer.num_nodes if trainer is not None else 1,
+        )
     )
 
-    return suggested_max_num_workers(int(local_world_size))
+    # use manual number of cpus to impose restrictions
+    cpus = int(os.environ.get("NUM_AVAILABLE_CPUS", None) or 0)
+    if cpus > 0:
+        return max(1, cpus // local_world_size - 1)
+
+    return suggested_max_num_workers(local_world_size)
 
 
 class BaseDataModule(L.LightningDataModule, ABC):
