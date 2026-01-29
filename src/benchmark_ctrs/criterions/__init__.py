@@ -1,4 +1,4 @@
-from typing import Literal, Protocol
+from typing import Generic, Literal, Protocol, TypeAlias, TypeVar
 
 from torch import Tensor
 
@@ -11,5 +11,11 @@ class Criterion(Protocol):
     def __call__(self, outputs: Tensor, targets: Tensor) -> Tensor: ...
 
 
-class CriterionCallable(Protocol):
-    def __call__(self, reduction: Reduction) -> Criterion: ...
+T_co = TypeVar("T_co", covariant=True, bound=Criterion)
+
+
+class CriterionCallable(Protocol, Generic[T_co]):
+    def __call__(self, reduction: str) -> T_co: ...
+
+
+AnyCriterionCallable: TypeAlias = CriterionCallable[Criterion]
