@@ -7,8 +7,7 @@ from lightning.pytorch.utilities.types import (
     OptimizerLRSchedulerConfig,
 )
 from torch import Tensor
-from torch.optim import Optimizer
-from torch.optim.lr_scheduler import LRScheduler, ReduceLROnPlateau
+from torch.optim import Optimizer, lr_scheduler
 from typing_extensions import NotRequired, TypedDict
 
 __all__ = [
@@ -27,12 +26,20 @@ class DictStepOutput(TypedDict, extra_items=Any):
     predictions: NotRequired[Tensor]
 
 
+Classifier: TypeAlias = Callable[[Tensor], Tensor]
+OptimizerCallable: TypeAlias = Callable[[Iterable[Any]], Optimizer]
+LRScheduler: TypeAlias = lr_scheduler.LRScheduler | lr_scheduler.ReduceLROnPlateau
+LRSchedulerCallable: TypeAlias = Callable[[Optimizer], LRScheduler]
+Batch: TypeAlias = tuple[Tensor, ...]
+StepOutput: TypeAlias = DictStepOutput | None
+
+
 ConfigureOptimizers: TypeAlias = (
     Optimizer
     | Sequence[Optimizer]
     | tuple[
         Sequence[Optimizer],
-        Sequence[LRScheduler | ReduceLROnPlateau | LRSchedulerConfig],
+        Sequence[LRScheduler | LRSchedulerConfig],
     ]
     | OptimizerConfig
     | OptimizerLRSchedulerConfig
@@ -40,10 +47,3 @@ ConfigureOptimizers: TypeAlias = (
     | Sequence[OptimizerLRSchedulerConfig]
     | None
 )
-
-
-Classifier: TypeAlias = Callable[[Tensor], Tensor]
-OptimizerCallable: TypeAlias = Callable[[Iterable[Any]], Optimizer]
-LRSchedulerCallable: TypeAlias = Callable[[Optimizer], LRScheduler | ReduceLROnPlateau]
-Batch: TypeAlias = tuple[Tensor, ...]
-StepOutput: TypeAlias = DictStepOutput | None

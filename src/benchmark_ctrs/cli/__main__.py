@@ -1,6 +1,10 @@
 import logging
 from pathlib import Path
+from typing import Any
 
+import lightning.pytorch as pl
+import torch
+import torchvision
 from lightning.pytorch.cli import ArgsType, LightningArgumentParser, LightningCLI
 from typing_extensions import override
 
@@ -14,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 def main(args: ArgsType = None) -> None:
     hook = plugins.get_hook()
+
     try:
         hook.register_callbacks()
     except Exception:
@@ -34,6 +39,18 @@ def main(args: ArgsType = None) -> None:
     except Exception:
         logger.exception("Error raised when registering plugin training modules.")
 
+    try:
+        hook.register_criterions()
+    except Exception:
+        logger.exception("Error raised when registering plugin criterions.")
+
+    try:
+        hook.register_lr_schedulers()
+    except Exception:
+        logger.exception(
+            "Error raised when registering plugin learning rate schedulers."
+        )
+
     BenchmarkCTRSCLI(
         model_class=BaseModule,
         subclass_mode_model=True,
@@ -46,7 +63,6 @@ def main(args: ArgsType = None) -> None:
         parser_kwargs={
             "version": benchmark_ctrs.__version__,
             "default_env": True,
-            "dump_header": [f"# benchmark-ctrs=={benchmark_ctrs.__version__}"],
             "fit": {
                 "default_config_files": [
                     Path(__file__).parent / "default_config_fit.yml"
@@ -64,7 +80,22 @@ def main(args: ArgsType = None) -> None:
 
 class BenchmarkCTRSCLI(LightningCLI):
     @override
+    def init_parser(self, **kwargs: Any) -> LightningArgumentParser:
+        kwargs.setdefault(
+            "dump_header",
+            [
+                f"torch=={torch.__version__}",
+                f"torchvision=={torchvision.__version__}",
+                f"lightning.pytorch=={pl.__version__}",  # type: ignore
+                f"benchmark-ctrs=={benchmark_ctrs.__version__}",
+            ],
+        )
+        return super().init_parser(**kwargs)
+
+    @override
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
+        super().add_arguments_to_parser(parser)
+
         # Link values from the data module to the training module
         parser.link_arguments(
             "data.classes", "model.init_args.num_classes", apply_on="instantiate"

@@ -8,6 +8,7 @@ from benchmark_ctrs.certification.abc import CertificationMethod
 from benchmark_ctrs.criterions import Criterion
 from benchmark_ctrs.datasets.module import BaseDataModule
 from benchmark_ctrs.modules.module import BaseModule
+from benchmark_ctrs.types import LRScheduler, LRSchedulerCallable
 
 
 class HookType:
@@ -46,6 +47,14 @@ class HookType:
         """
         ...
 
+    @staticmethod
+    def register_lr_schedulers() -> Iterable[type[LRScheduler] | LRSchedulerCallable]:
+        """
+        Return all learning rate scheduler classes and factories types that
+        should be accessible to the CLI
+        """
+        ...
+
 
 hookspec = pluggy.HookspecMarker("benchmark_ctrs")
 
@@ -80,5 +89,14 @@ def register_certification_methods() -> Iterable[type[CertificationMethod]]:
 def register_criterions() -> Iterable[type[Criterion]]:
     """
     Return all criterions that should be accessible to the CLI
+    """
+    ...
+
+
+@hookspec
+def register_lr_schedulers() -> Iterable[type[LRScheduler] | LRSchedulerCallable]:
+    """
+    Return all learning rate scheduler classes and factories types that
+    should be accessible to the CLI
     """
     ...
