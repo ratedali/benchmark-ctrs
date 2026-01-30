@@ -1,8 +1,12 @@
+# ruff: noqa: F403
 from typing import Literal
 
 from lightning.pytorch.utilities import LightningEnum
 
 from benchmark_ctrs.models import layers, lenet, resnet
+from benchmark_ctrs.models.layers import *
+from benchmark_ctrs.models.lenet import *
+from benchmark_ctrs.models.resnet import *
 
 __all__ = [
     "Architecture",
