@@ -11,8 +11,8 @@ __all__ = ["ImageNetStandard"]
 
 class ImageNetStandard(Standard):
     @override
-    def init_model(self, mean: list[float], std: list[float]) -> None:
-        super().init_model(mean, std)
+    def init_model(self) -> None:
+        super().init_model()
         for m in self.model.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
