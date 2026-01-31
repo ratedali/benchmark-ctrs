@@ -83,25 +83,45 @@ class BaseModule(L.LightningModule):
         self.num_classes = num_classes
         self.grads_log_interval = grads_log_interval
 
-        with self.trainer.init_module():
-            self.init_model(arch or default_arch, list(mean), list(std))
-            self.init_metrics(
-                certification=certification,
-                certification_params=certification_params,
-            )
+        self.architecture = arch or default_arch
+        self.norm_mean = list(mean)
+        self.norm_std = list(std)
+        self.certification_method: CertificationMethod | None | Literal[True] = (
+            certification
+        )
+        self.certification_params = certification_params
 
-    def init_model(
-        self,
-        architecture: str,
-        mean: list[float],
-        std: list[float],
-    ) -> None:
+        self.metric_acc_train = MetricCollection(
+            {
+                "accuracy": Accuracy(task="multiclass", num_classes=self.num_classes),
+                "accuracy_top5": Accuracy(
+                    task="multiclass",
+                    num_classes=self.num_classes,
+                    top_k=5,
+                ),
+            },
+            prefix="train/",
+        )
+        self.metric_loss_train = MeanMetric(nan_strategy="error")
+
+        self.metric_acc_val = self.metric_acc_train.clone(prefix="val/")
+        self.metric_loss_val = MeanMetric(nan_strategy="error")
+
+        self._batch_cuda_events: tuple[torch.cuda.Event, ...] | None = None
+        self.metric_batch_time = MeanMetric(nan_strategy="error")
+        self.metric_epoch_time = SumMetric(nan_strategy="error")
+        self.metric_gpu_memory = MeanMetric(nan_strategy="error")
+
+    @override
+    def configure_model(self) -> None:
+        if not hasattr(self, "model"):
+            self.init_model()
+            self.init_cert()
+
+    def init_model(self) -> None:
         self.model_architecture = cast(
             "Architecture | None",
-            Architecture.try_from_str(
-                architecture,
-                source="value",
-            ),
+            Architecture.try_from_str(self.architecture, source="value"),
         )
         if self.model_architecture is not None:
             if self.model_architecture == Architecture.LeNet:
@@ -118,51 +138,28 @@ class BaseModule(L.LightningModule):
                 )
         if not self.raw_model:
             try:
-                self.raw_model = models.get_model(architecture)
+                self.raw_model = models.get_model(self.architecture)
             except KeyError as e:
                 raise ValueError(
-                    f"Unknown value for arch: {architecture}. "
+                    f"Unknown value for arch: {self.architecture}. "
                     f"Possible values are: {', '.join(Architecture._member_names_)} "
                     "or a valid torchvision model name."
                 ) from e
 
-        self.normalization_layer = Normalization(mean=mean, sd=std)
+        self.normalization_layer = Normalization(mean=self.norm_mean, sd=self.norm_std)
         self.model = torch.nn.Sequential(self.normalization_layer, self.raw_model)
 
-    def init_metrics(
-        self,
-        certification: cr.CertificationMethod | Literal[True] | None,
-        certification_params: cr.Params | None,
-    ) -> None:
-        self.metric_acc_train = MetricCollection(
-            {
-                "accuracy": Accuracy(task="multiclass", num_classes=self.num_classes),
-                "accuracy_top5": Accuracy(
-                    task="multiclass",
-                    num_classes=self.num_classes,
-                    top_k=5,
-                ),
-            },
-            prefix="train/",
-        )
-        self.metric_loss_train = MeanMetric(nan_strategy="error")
-
-        self._batch_cuda_events: tuple[torch.cuda.Event, ...] | None = None
-        self.metric_batch_time = MeanMetric(nan_strategy="error")
-        self.metric_epoch_time = SumMetric(nan_strategy="error")
-        self.metric_gpu_memory = MeanMetric(nan_strategy="error")
-
-        self.metric_acc_val = self.metric_acc_train.clone(prefix="val/")
-        self.metric_loss_val = MeanMetric(nan_strategy="error")
-
+    def init_cert(self) -> None:
         # Setup certified radius metrics
         method: CertificationMethod | None = (
-            RSCertification() if certification is True else certification
+            RSCertification()
+            if self.certification_method is True
+            else self.certification_method
         )
 
         self.metric_val_cert = None
         self.metric_predict_cert = None
-        params = certification_params or cr.Params(self.sigma)
+        params = self.certification_params or cr.Params(self.sigma)
         if method is not None:
             self.metric_val_cert = cr.CertifiedRadius(
                 self.eval_model,
