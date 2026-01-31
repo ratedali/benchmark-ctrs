@@ -95,6 +95,25 @@ class BenchmarkCTRSCLI(LightningCLI):
     @override
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
         super().add_arguments_to_parser(parser)
+        # Easy way to overwrite name and version when using multiple loggers
+        parser.add_argument(
+            "--name",
+            type=str | None,
+            default="lightning_logs",
+            help="A name to identify identify similar runs",
+        )
+        parser.add_argument(
+            "--version",
+            type=str | None,
+            default=None,
+            help="A version number/name to identify this run",
+        )
+
+        parser.link_arguments(
+            "trainer.default_root_dir", "trainer.logger.init_args.save_dir"
+        )
+        parser.link_arguments("name", "trainer.logger.init_args.name")
+        parser.link_arguments("version", "trainer.logger.init_args.version")
 
         # Link values from the data module to the training module
         parser.link_arguments(
