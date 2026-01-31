@@ -10,8 +10,9 @@ from typing_extensions import override
 
 import benchmark_ctrs
 from benchmark_ctrs.cli import plugins
-from benchmark_ctrs.datasets.module import BaseDataModule
-from benchmark_ctrs.modules.module import BaseModule
+from benchmark_ctrs.datasets import BaseDataModule
+from benchmark_ctrs.modules import BaseModule
+from benchmark_ctrs.types import LRSchedulerCallable, OptimizerCallable
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ def main(args: ArgsType = None) -> None:
             "overwrite": True,
             "multifile": True,
         },
+        auto_configure_optimizers=False,
         parser_kwargs={
             "version": benchmark_ctrs.__version__,
             "default_env": True,
@@ -114,6 +116,21 @@ class BenchmarkCTRSCLI(LightningCLI):
         )
         parser.link_arguments("name", "trainer.logger.init_args.name")
         parser.link_arguments("version", "trainer.logger.init_args.version")
+
+        # Optimizer and learning rates scheduler
+        parser.add_argument(
+            "--optimizer",
+            type=OptimizerCallable | None,
+            default=None,
+        )
+        parser.link_arguments("optimizer", "model.init_args.optimizer")
+
+        parser.add_argument(
+            "--lr_scheduler",
+            type=LRSchedulerCallable | None,
+            default=None,
+        )
+        parser.link_arguments("lr_scheduler", "model.init_args.lr_scheduler")
 
         # Link values from the data module to the training module
         parser.link_arguments(

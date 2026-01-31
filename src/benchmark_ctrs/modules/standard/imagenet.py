@@ -1,10 +1,10 @@
 from torch import nn
-from torch.optim import SGD
+from torch.optim import SGD, Optimizer
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from typing_extensions import override
 
 from benchmark_ctrs.modules.standard.module import Standard
-from benchmark_ctrs.types import ConfigureOptimizers
+from benchmark_ctrs.types import LRScheduler
 
 __all__ = ["ImageNetStandard"]
 
@@ -21,25 +21,18 @@ class ImageNetStandard(Standard):
                 nn.init.constant_(m.bias, 0)
 
     @override
-    def configure_optimizers(self) -> ConfigureOptimizers:
-        optimizer = SGD(
+    def default_optimizer(self) -> Optimizer:
+        return SGD(
             self.parameters(),
             lr=0.1,
             momentum=0.9,
             weight_decay=0.0001,
         )
 
-        lr_scheduler = CosineAnnealingLR(
+    @override
+    def default_lr_scheduler(self, optimizer: Optimizer) -> LRScheduler | None:
+        return CosineAnnealingLR(
             optimizer,
             T_max=self.trainer.min_epochs or 90,
             eta_min=0,
         )
-
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": lr_scheduler,
-                "interval": "epoch",
-                "frequency": 1,
-            },
-        }

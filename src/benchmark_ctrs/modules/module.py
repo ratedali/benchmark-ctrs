@@ -26,7 +26,14 @@ from benchmark_ctrs.models import Architecture, ArchitectureOption
 from benchmark_ctrs.models.layers import Normalization
 from benchmark_ctrs.models.lenet import LeNet
 from benchmark_ctrs.models.resnet import cifar_resnet
-from benchmark_ctrs.types import Batch, ConfigureOptimizers, StepOutput
+from benchmark_ctrs.types import (
+    Batch,
+    ConfigureOptimizers,
+    LRScheduler,
+    LRSchedulerCallable,
+    OptimizerCallable,
+    StepOutput,
+)
 from benchmark_ctrs.utilities import check_valid_step_output
 
 __all__ = [
@@ -74,12 +81,15 @@ class BaseModule(L.LightningModule):
         arch: ArchitectureOption | str | None = None,
         default_arch: ArchitectureOption | str = "resnet50",
         grads_log_interval: int = 0,
+        optimizer: OptimizerCallable | None,
+        lr_scheduler: LRSchedulerCallable | None,
     ) -> None:
         super().__init__()
         self.sigma = sigma
         self.strict_loading = False
         self.automatic_accuracy = True
 
+        # Fields
         self.num_classes = num_classes
         self.grads_log_interval = grads_log_interval
 
@@ -90,7 +100,10 @@ class BaseModule(L.LightningModule):
             certification
         )
         self.certification_params = certification_params
+        self.optimizer_callable = optimizer
+        self.lr_scheduler_callable = lr_scheduler
 
+        # Metrics
         self.metric_acc_train = MetricCollection(
             {
                 "accuracy": Accuracy(task="multiclass", num_classes=self.num_classes),
@@ -113,10 +126,56 @@ class BaseModule(L.LightningModule):
         self.metric_gpu_memory = MeanMetric(nan_strategy="error")
 
     @override
+    def setup(self, stage: str) -> None:
+        super().setup(stage)
+
+        # set max number of cpus
+        cpus = os.environ.get("NUM_AVAILABLE_CPUS", None)
+        if cpus is not None:
+            local_world_size = int(
+                os.environ.get(
+                    "LOCAL_WORLD_SIZE",
+                    self.trainer.world_size // self.trainer.num_nodes,
+                )
+            )
+
+            # use manual number of cpus to impose restrictions
+            max_cpus = max(1, int(cpus) // local_world_size - 1)
+            torch.set_num_threads(max_cpus)
+            torch.set_num_interop_threads(max_cpus)
+
+    @override
     def configure_model(self) -> None:
         if not hasattr(self, "model"):
             self.init_model()
             self.init_cert()
+
+    @override
+    def configure_optimizers(self) -> ConfigureOptimizers:
+        if self.optimizer_callable:
+            optimizer = self.optimizer_callable(self.parameters())
+        else:
+            optimizer = self.default_optimizer()
+
+        if self.lr_scheduler_callable:
+            lr_scheduler = self.lr_scheduler_callable(optimizer)
+        else:
+            lr_scheduler = self.default_lr_scheduler(optimizer)
+
+        if lr_scheduler:
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": lr_scheduler,
+                    "interval": "epoch",
+                    "frequency": 1,
+                },
+            }
+        return optimizer
+
+    @property
+    def eval_model(self) -> nn.Module:
+        return self.model
 
     def init_model(self) -> None:
         self.model_architecture = cast(
@@ -178,48 +237,11 @@ class BaseModule(L.LightningModule):
                 reduction="none",
             )
 
-    @override
-    def setup(self, stage: str) -> None:
-        super().setup(stage)
+    def default_optimizer(self) -> Optimizer:
+        return SGD(self.parameters(), lr=0.1, momentum=0.9, weight_decay=0.0001)
 
-        # set max number of cpus
-        cpus = os.environ.get("NUM_AVAILABLE_CPUS", None)
-        if cpus is not None:
-            local_world_size = int(
-                os.environ.get(
-                    "LOCAL_WORLD_SIZE",
-                    self.trainer.world_size // self.trainer.num_nodes,
-                )
-            )
-
-            # use manual number of cpus to impose restrictions
-            max_cpus = max(1, int(cpus) // local_world_size - 1)
-            torch.set_num_threads(max_cpus)
-            torch.set_num_interop_threads(max_cpus)
-
-    @override
-    def configure_optimizers(self) -> ConfigureOptimizers:
-        optimizer = SGD(
-            self.parameters(),
-            lr=0.1,
-            momentum=0.9,
-            weight_decay=0.0001,
-        )
-
-        lr_scheduler = StepLR(optimizer, 50, 0.1)
-
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": lr_scheduler,
-                "interval": "epoch",
-                "frequency": 1,
-            },
-        }
-
-    @property
-    def eval_model(self) -> nn.Module:
-        return self.model
+    def default_lr_scheduler(self, optimizer: Optimizer) -> LRScheduler | None:
+        return StepLR(optimizer, 50, 0.1)
 
     @override
     def forward(self, *args: Any, **kwargs: Any) -> Tensor:
