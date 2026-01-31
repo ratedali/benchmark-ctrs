@@ -83,26 +83,12 @@ class BaseModule(L.LightningModule):
         self.num_classes = num_classes
         self.grads_log_interval = grads_log_interval
 
-        self.init_model(arch or default_arch, list(mean), list(std))
-        self.init_metrics(
-            certification=certification,
-            certification_params=certification_params,
-        )
-
-        # set max number of cpus
-        cpus = os.environ.get("NUM_AVAILABLE_CPUS", None)
-        if cpus is not None:
-            local_world_size = int(
-                os.environ.get(
-                    "LOCAL_WORLD_SIZE",
-                    self.trainer.world_size // self.trainer.num_nodes,
-                )
+        with self.trainer.init_module():
+            self.init_model(arch or default_arch, list(mean), list(std))
+            self.init_metrics(
+                certification=certification,
+                certification_params=certification_params,
             )
-
-            # use manual number of cpus to impose restrictions
-            max_cpus = max(1, int(cpus) // local_world_size - 1)
-            torch.set_num_threads(max_cpus)
-            torch.set_num_interop_threads(max_cpus)
 
     def init_model(
         self,
@@ -194,6 +180,25 @@ class BaseModule(L.LightningModule):
                 num_classes=self.num_classes,
                 reduction="none",
             )
+
+    @override
+    def setup(self, stage: str) -> None:
+        super().setup(stage)
+
+        # set max number of cpus
+        cpus = os.environ.get("NUM_AVAILABLE_CPUS", None)
+        if cpus is not None:
+            local_world_size = int(
+                os.environ.get(
+                    "LOCAL_WORLD_SIZE",
+                    self.trainer.world_size // self.trainer.num_nodes,
+                )
+            )
+
+            # use manual number of cpus to impose restrictions
+            max_cpus = max(1, int(cpus) // local_world_size - 1)
+            torch.set_num_threads(max_cpus)
+            torch.set_num_interop_threads(max_cpus)
 
     @override
     def configure_optimizers(self) -> ConfigureOptimizers:
