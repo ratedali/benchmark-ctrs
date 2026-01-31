@@ -353,9 +353,10 @@ class BaseModule(L.LightningModule):
             cert = cast("cr.CertificationResult", self.metric_val_cert.compute())
             self.metric_val_cert.reset()
 
-            self.log("certified_radius/average", cert.radii.mean())
-            self.log("certified_radius/best", cert.radii.max())
-            self.log("certified_radius/worst", cert.radii.min())
+            if self.trainer.is_global_zero:
+                self.log("certified_radius/average", cert.radii.mean(), sync_dist=False)
+                self.log("certified_radius/best", cert.radii.max(), sync_dist=False)
+                self.log("certified_radius/worst", cert.radii.min(), sync_dist=False)
 
     @override
     def validation_step(
@@ -385,7 +386,9 @@ class BaseModule(L.LightningModule):
             self.metric_predict_cert.update(inputs)
             cert = cast("cr.CertificationResult", self.metric_predict_cert.compute())
             self.metric_predict_cert.reset()
-            result["certification"] = cert
+
+            if self.trainer.is_global_zero:
+                result["certification"] = cert
         return result
 
     @rank_zero_only

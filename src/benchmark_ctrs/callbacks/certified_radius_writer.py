@@ -5,9 +5,10 @@ from typing import Any, Final, cast
 
 import lightning as L
 from lightning.pytorch.callbacks import BasePredictionWriter
+from lightning.pytorch.utilities import rank_zero_only
 from typing_extensions import override
 
-from benchmark_ctrs.modules.module import BaseModule, Batch, PredictionResult
+from benchmark_ctrs.modules import Batch, PredictionResult
 
 __all__ = ["CERT_FIELDS", "CLEAN_FIELDS", "CertifiedRadiusWriter"]
 
@@ -19,61 +20,59 @@ class CertifiedRadiusWriter(BasePredictionWriter):
     def __init__(
         self,
         outdir: str | None = None,
-        filename: str = "cert.csv",
-        clean_filename: str = "clean.csv",
+        filename: str | None = "cert.csv",
+        clean_filename: str | None = "clean.csv",
         *,
-        ignore_cert: bool = False,
+        overwrite: bool = False,
     ) -> None:
         super().__init__(write_interval="batch")
         self._outdir = Path(outdir) if outdir else None
         if self._outdir is not None and not self._outdir.is_dir():
             raise ValueError(f"{outdir} is not a directory.")
 
-        self._filename = filename
-        self._clean_filename = clean_filename
-        self._ignore_cert = ignore_cert
+        self.filenames = {
+            "cert": (filename, CERT_FIELDS),
+            "clean": (clean_filename, CLEAN_FIELDS),
+        }
+        self.overwrite = overwrite
 
     @override
+    @rank_zero_only
     def on_predict_epoch_start(
         self,
         trainer: L.Trainer,
         pl_module: L.LightningModule,
     ) -> None:
-        if not isinstance(pl_module, BaseModule):
-            raise TypeError(
-                "Only modules that are subclasses of "
-                f"{BaseModule.__qualname__} are supported"
-            )
+        for filename, header in self.filenames.values():
+            if filename:
+                path = self._resolve_output_path(trainer, filename)
 
-        clean_path = self._resolve_output_path(trainer, self._clean_filename)
-        with clean_path.open("tw") as f:
-            writer = DictWriter(f, fieldnames=CLEAN_FIELDS)
-            writer.writeheader()
+                if path.exists() and not self.overwrite:
+                    raise ValueError(f"{path} exists, and overwite=False")
 
-        if not self._ignore_cert:
-            cert_path = self._resolve_output_path(trainer, self._filename)
-            with cert_path.open("tw") as f:
-                writer = DictWriter(f, fieldnames=CERT_FIELDS)
-                writer.writeheader()
+                with path.open("tw") as f:
+                    writer = DictWriter(f, fieldnames=header)
+                    writer.writeheader()
 
     @override
+    @rank_zero_only
     def write_on_batch_end(
         self,
         trainer: L.Trainer,
         pl_module: L.LightningModule,
-        prediction: PredictionResult,
+        prediction: Any | None,
         batch_indices: Sequence[int] | None,
         batch: Batch,
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        if not isinstance(pl_module, BaseModule):
+        if not isinstance(prediction, dict) or "clean" not in prediction:
             raise TypeError(
-                "Only modules that are subclasses of "
-                f"{BaseModule.__qualname__} are supported"
+                "`predict_step` should return `benchmark_ctrs.modules.PredictionResult`"
+                " instance from global rank 0."
             )
-        if not isinstance(prediction, dict):
-            raise TypeError("return type of `predict_step` should not be None")
+        prediction = cast("PredictionResult", prediction)
+
         if batch_indices is None:
             raise ValueError("Batch indices is required")
 
@@ -82,25 +81,29 @@ class CertifiedRadiusWriter(BasePredictionWriter):
         targets = cast("list[int]", targets.long().tolist())
         predictions: list[float] = prediction["clean"].view(-1).tolist()
 
-        clean_path = self._resolve_output_path(trainer, self._clean_filename)
+        clean_filename, clean_header = self.filenames["clean"]
+        if clean_filename:
+            clean_path = self._resolve_output_path(trainer, clean_filename)
 
-        if len(predictions) > 0:
-            with clean_path.open("at") as f:
-                writer = DictWriter(f, fieldnames=CLEAN_FIELDS)
-                writer.writerows(
-                    [
-                        {
-                            "idx": batch_indices[i],
-                            "label": targets[i],
-                            "predict": int(pred),
-                            "correct": 1 if pred == targets[i] else 0,
-                        }
-                        for i, pred in enumerate(predictions)
-                    ]
-                )
+            if len(predictions) > 0:
+                with clean_path.open("at") as f:
+                    writer = DictWriter(f, fieldnames=clean_header)
+                    writer.writerows(
+                        [
+                            {
+                                "idx": batch_indices[i],
+                                "label": targets[i],
+                                "predict": int(pred),
+                                "correct": 1 if pred == targets[i] else 0,
+                            }
+                            for i, pred in enumerate(predictions)
+                        ]
+                    )
 
-        if "certification" in prediction and not self._ignore_cert:
-            cert_path = self._resolve_output_path(trainer, self._filename)
+        cert_filename, cert_header = self.filenames["cert"]
+        if cert_filename and "certification" in prediction:
+            cert_path = self._resolve_output_path(trainer, cert_filename)
+
             cert = prediction["certification"]
             indices: list[int] = cert.indices.view(-1).long().tolist()
             predictions: list[float] = cert.predictions.view(-1).tolist()
@@ -108,7 +111,7 @@ class CertifiedRadiusWriter(BasePredictionWriter):
 
             if len(indices) > 0:
                 with cert_path.open("at") as f:
-                    writer = DictWriter(f, fieldnames=CERT_FIELDS)
+                    writer = DictWriter(f, fieldnames=cert_header)
                     writer.writerows(
                         [
                             {
