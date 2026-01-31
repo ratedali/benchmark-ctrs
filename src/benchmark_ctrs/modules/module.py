@@ -1,3 +1,4 @@
+import os
 import time
 from itertools import chain
 from typing import Any, Literal, cast
@@ -87,6 +88,21 @@ class BaseModule(L.LightningModule):
             certification=certification,
             certification_params=certification_params,
         )
+
+        # set max number of cpus
+        cpus = os.environ.get("NUM_AVAILABLE_CPUS", None)
+        if cpus is not None:
+            local_world_size = int(
+                os.environ.get(
+                    "LOCAL_WORLD_SIZE",
+                    self.trainer.world_size // self.trainer.num_nodes,
+                )
+            )
+
+            # use manual number of cpus to impose restrictions
+            max_cpus = max(1, int(cpus) // local_world_size - 1)
+            torch.set_num_threads(max_cpus)
+            torch.set_num_interop_threads(max_cpus)
 
     def init_model(
         self,
