@@ -1,21 +1,14 @@
-from typing import Generic, Literal, Protocol, TypeAlias, TypeVar
+from typing import Literal, Protocol, TypeAlias
 
-from torch import Tensor
+from torch import nn
 
 __all__ = ["Criterion", "CriterionCallable", "Reduction"]
 
 Reduction = Literal["mean", "sum", "none"]
 
 
-class Criterion(Protocol):
-    def __call__(self, outputs: Tensor, targets: Tensor) -> Tensor: ...
+Criterion: TypeAlias = nn.Module
 
 
-T_co = TypeVar("T_co", covariant=True, bound=Criterion)
-
-
-class CriterionCallable(Protocol, Generic[T_co]):
-    def __call__(self, reduction: str) -> T_co: ...
-
-
-AnyCriterionCallable: TypeAlias = CriterionCallable[Criterion]
+class CriterionCallable(Protocol):
+    def __call__(self, *, reduction: str) -> Criterion: ...

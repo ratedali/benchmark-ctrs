@@ -81,8 +81,8 @@ class BaseModule(L.LightningModule):
         arch: ArchitectureOption | str | None = None,
         default_arch: ArchitectureOption | str = "resnet50",
         grads_log_interval: int = 0,
-        optimizer: OptimizerCallable | None,
-        lr_scheduler: LRSchedulerCallable | None,
+        optimizer: OptimizerCallable | None = None,
+        lr_scheduler: LRSchedulerCallable | None = None,
     ) -> None:
         super().__init__()
         self.sigma = sigma
