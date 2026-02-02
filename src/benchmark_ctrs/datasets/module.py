@@ -54,7 +54,7 @@ class BaseDataModule(L.LightningDataModule, ABC):
 
         self.workers = workers if workers is not None else _get_default_workers()
 
-        if validation <= 0:
+        if validation < 0:
             raise ValueError("validation must be a non-negative number.")
         if isinstance(validation, float) and validation > 1:
             raise ValueError("validation cannot be a float greater than 1.")
