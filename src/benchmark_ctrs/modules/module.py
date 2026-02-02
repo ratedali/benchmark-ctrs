@@ -130,8 +130,8 @@ class BaseModule(L.LightningModule):
         super().setup(stage)
 
         # set max number of cpus
-        cpus = os.environ.get("NUM_AVAILABLE_CPUS", None)
-        if cpus is not None:
+        threads = os.environ.get("OMP_THREAD_LIMIT", None)
+        if threads is not None:
             local_world_size = int(
                 os.environ.get(
                     "LOCAL_WORLD_SIZE",
@@ -140,7 +140,7 @@ class BaseModule(L.LightningModule):
             )
 
             # use manual number of cpus to impose restrictions
-            max_cpus = max(1, int(cpus) // local_world_size - 1)
+            max_cpus = max(1, int(threads) // local_world_size)
             torch.set_num_threads(max_cpus)
             torch.set_num_interop_threads(max_cpus)
 

@@ -24,9 +24,9 @@ def _get_default_workers(trainer: L.Trainer | None = None) -> int:
     )
 
     # use manual number of cpus to impose restrictions
-    cpus = int(os.environ.get("NUM_AVAILABLE_CPUS", None) or 0)
-    if cpus > 0:
-        return max(1, cpus // local_world_size - 1)
+    threads = int(os.environ.get("OMP_THREAD_LIMIT", "0"))
+    if threads > 0:
+        return max(1, threads // local_world_size - 1)
 
     return suggested_max_num_workers(local_world_size)
 
