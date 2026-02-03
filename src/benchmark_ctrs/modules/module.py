@@ -182,8 +182,8 @@ class BaseModule(L.LightningModule):
                 self.raw_model = models.get_model(self.architecture)
             except KeyError as e:
                 raise ValueError(
-                    f"Unknown value for arch: {self.architecture}. Possible values are: "
-                    "lenet, cifar-resnetN (replace N with desired depth), "
+                    f"Unknown value for arch: {self.architecture}. Possible values "
+                    "are: lenet, cifar-resnetN (replace N with desired depth), "
                     "or a valid torchvision model name."
                 ) from e
 
