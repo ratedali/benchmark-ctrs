@@ -6,7 +6,6 @@ from torchvision.transforms import ToTensor
 from typing_extensions import override
 
 from benchmark_ctrs.datasets.module import BaseDataModule
-from benchmark_ctrs.models import Architecture
 
 __all__ = ["MNIST"]
 
@@ -15,7 +14,7 @@ class MNIST(BaseDataModule):
     __means: Final = [0.0]
     __sds: Final = [1.0]
 
-    default_arch: ClassVar = Architecture.LeNet
+    default_arch: ClassVar = "lenet"
 
     def __init__(self, *args: Any, batch_size: int = 256, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs, batch_size=batch_size)

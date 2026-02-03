@@ -13,7 +13,7 @@ from torchvision.transforms import (
 from typing_extensions import override
 
 from benchmark_ctrs.datasets.module import BaseDataModule
-from benchmark_ctrs.models import Architecture
+from benchmark_ctrs.models import make_resnet_arch
 
 __all__ = ["ImageNet"]
 
@@ -22,7 +22,7 @@ class ImageNet(BaseDataModule):
     __means: Final = [0.485, 0.456, 0.406]
     __sds: Final = [0.229, 0.224, 0.225]
 
-    default_arch: ClassVar = Architecture.ResNet50
+    default_arch: ClassVar = make_resnet_arch("imagenet", 50)
 
     def __init__(self, *args: Any, batch_size: int = 64, **kwargs: Any) -> None:
         super().__init__(*args, batch_size=batch_size, **kwargs)

@@ -9,23 +9,15 @@ from lightning.pytorch.loggers import TensorBoardLogger
 from lightning.pytorch.utilities import grad_norm, rank_zero_only
 from lightning.pytorch.utilities.types import STEP_OUTPUT
 from torch import Tensor, nn
-from torch.optim import SGD
-from torch.optim.lr_scheduler import StepLR
-from torch.optim.optimizer import Optimizer
+from torch.optim import SGD, Optimizer, lr_scheduler
 from torch.utils.tensorboard.writer import SummaryWriter
-from torchmetrics import Metric, MetricCollection, SumMetric
-from torchmetrics.aggregation import MeanMetric
-from torchmetrics.classification import Accuracy
+from torchmetrics import Accuracy, MeanMetric, Metric, MetricCollection, SumMetric
 from torchvision import models
 from typing_extensions import NotRequired, TypedDict, override
 
-from benchmark_ctrs.certification import CertificationMethod
-from benchmark_ctrs.certification.rs_certification import RSCertification
+from benchmark_ctrs.certification import CertificationMethod, RSCertification
 from benchmark_ctrs.metrics import certified_radius as cr
-from benchmark_ctrs.models import Architecture, ArchitectureOption
-from benchmark_ctrs.models.layers import Normalization
-from benchmark_ctrs.models.lenet import LeNet
-from benchmark_ctrs.models.resnet import cifar_resnet
+from benchmark_ctrs.models import LeNet, Normalization, cifar_resnet, resnet_arch_info
 from benchmark_ctrs.types import (
     Batch,
     ConfigureOptimizers,
@@ -56,7 +48,7 @@ class BaseModule(L.LightningModule):
     normalization_layer: Normalization
     model: nn.Module
 
-    model_architecture: Architecture | None
+    architecture: str
     num_classes: int
     grads_log_interval: int
 
@@ -78,8 +70,8 @@ class BaseModule(L.LightningModule):
         mean: list[float],
         certification: CertificationMethod | Literal[True] | None = None,
         certification_params: cr.Params | None = None,
-        arch: ArchitectureOption | str | None = None,
-        default_arch: ArchitectureOption | str = "resnet50",
+        arch: str | None = None,
+        default_arch: str = "resnet50",
         grads_log_interval: int = 0,
         optimizer: OptimizerCallable | None = None,
         lr_scheduler: LRSchedulerCallable | None = None,
@@ -178,30 +170,20 @@ class BaseModule(L.LightningModule):
         return self.model
 
     def init_model(self) -> None:
-        self.model_architecture = cast(
-            "Architecture | None",
-            Architecture.try_from_str(self.architecture, source="value"),
-        )
-        if self.model_architecture is not None:
-            if self.model_architecture == Architecture.LeNet:
-                self.raw_model = LeNet()
-            elif self.model_architecture == Architecture.ResNet50:
-                self.raw_model = models.resnet50(
-                    weights=None,
-                    num_classes=self.num_classes,
-                )
-            elif self.model_architecture.is_cifarresnet:
-                self.raw_model = cifar_resnet(
-                    depth=self.model_architecture.resnet_depth,
-                    num_classes=self.num_classes,
-                )
-        if not self.raw_model:
+        if self.architecture == "lenet":
+            self.raw_model = LeNet()
+        elif resnet := resnet_arch_info(self.architecture):
+            variant, depth = resnet
+            if variant == "cifar":
+                self.raw_model = cifar_resnet(depth=depth, num_classes=self.num_classes)
+
+        if not hasattr(self, "raw_model"):
             try:
                 self.raw_model = models.get_model(self.architecture)
             except KeyError as e:
                 raise ValueError(
-                    f"Unknown value for arch: {self.architecture}. "
-                    f"Possible values are: {', '.join(Architecture._member_names_)} "
+                    f"Unknown value for arch: {self.architecture}. Possible values are: "
+                    "lenet, cifar-resnetN (replace N with desired depth), "
                     "or a valid torchvision model name."
                 ) from e
 
@@ -241,7 +223,7 @@ class BaseModule(L.LightningModule):
         return SGD(self.parameters(), lr=0.1, momentum=0.9, weight_decay=0.0001)
 
     def default_lr_scheduler(self, optimizer: Optimizer) -> LRScheduler | None:
-        return StepLR(optimizer, 50, 0.1)
+        return lr_scheduler.StepLR(optimizer, 50, 0.1)
 
     @override
     def forward(self, *args: Any, **kwargs: Any) -> Tensor:

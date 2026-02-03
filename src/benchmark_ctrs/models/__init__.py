@@ -1,51 +1,29 @@
 # ruff: noqa: F403
+import re
 from typing import Literal
-
-from lightning.pytorch.utilities import LightningEnum
 
 from benchmark_ctrs.models import layers, lenet, resnet
 from benchmark_ctrs.models.layers import *
 from benchmark_ctrs.models.lenet import *
 from benchmark_ctrs.models.resnet import *
 
-__all__ = [
-    "Architecture",
-    "ArchitectureOption",
-]
+__all__ = ["resnet_arch_info"]
 __all__ += resnet.__all__
 __all__ += layers.__all__
 __all__ += lenet.__all__
 
-ArchitectureOption = Literal[
-    "lenet",
-    "cifar-resnet20",
-    "cifar-resnet110",
-    "resnet50",
-]
+
+_resnet_depth_pat = re.compile(r"(?P<is_cifar>cifar-)?resnet(?P<depth>\d+)")
 
 
-class Architecture(LightningEnum):
-    LeNet = "lenet"
-    CIFARResNet20 = "cifar-resnet20"
-    CIFARResNet110 = "cifar-resnet110"
-    ResNet50 = "resnet50"
+def make_resnet_arch(dataset: Literal["imagenet", "cifar"], depth: int):
+    if dataset == "cifar":
+        return f"cifar-resnet{depth}"
+    return f"resnet{depth}"
 
-    @property
-    def is_cifarresnet(self) -> bool:
-        return "cifar-resnet" in self.value
 
-    @property
-    def is_resnet(self) -> bool:
-        return "resnet" in self.value
-
-    @property
-    def resnet_depth(self) -> int:
-        if not self.is_resnet:
-            raise ValueError(
-                "Architecture.resnet_depth is only supported on ResNet architectures"
-            )
-        return {
-            "cifar-resnet20": 20,
-            "resnet50": 50,
-            "cifar-resnet110": 110,
-        }[self.value]
+def resnet_arch_info(arch: str) -> tuple[Literal["cifar", "imagenet"], int] | None:
+    if match := _resnet_depth_pat.match(arch):
+        is_cifar, depth = match.group("is_cifar", "depth")
+        return "cifar" if is_cifar else "imagenet", int(depth)
+    return None

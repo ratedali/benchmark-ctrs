@@ -1,5 +1,4 @@
 import os
-from abc import ABC, abstractmethod
 from collections.abc import Sized
 from pathlib import Path
 from typing import Any, ClassVar
@@ -9,8 +8,6 @@ from lightning.pytorch.utilities import suggested_max_num_workers
 from lightning.pytorch.utilities.types import EVAL_DATALOADERS, TRAIN_DATALOADERS
 from torch.utils.data import DataLoader, Dataset
 from typing_extensions import override
-
-from benchmark_ctrs.models import Architecture
 
 __all__ = ["BaseDataModule"]
 
@@ -31,10 +28,10 @@ def _get_default_workers(trainer: L.Trainer | None = None) -> int:
     return suggested_max_num_workers(local_world_size)
 
 
-class BaseDataModule(L.LightningDataModule, ABC):
+class BaseDataModule(L.LightningDataModule):
     __default_cache_dir: ClassVar = Path("datasets_cache")
 
-    default_arch: ClassVar[Architecture | None] = None
+    default_arch: ClassVar[str | None] = None
 
     def __init__(
         self,
@@ -69,16 +66,16 @@ class BaseDataModule(L.LightningDataModule, ABC):
         self._predict: Dataset | None = None
 
     @property
-    @abstractmethod
-    def classes(self) -> int: ...
+    def classes(self) -> int:
+        raise NotImplementedError("Data module must have a classes property")
 
     @property
-    @abstractmethod
-    def mean(self) -> list[float]: ...
+    def mean(self) -> list[float]:
+        raise NotImplementedError("Data module must have a mean property")
 
     @property
-    @abstractmethod
-    def std(self) -> list[float]: ...
+    def std(self) -> list[float]:
+        raise NotImplementedError("Data module must have a std property")
 
     @override
     def train_dataloader(self) -> TRAIN_DATALOADERS:
