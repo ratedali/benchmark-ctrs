@@ -104,12 +104,6 @@ class BenchmarkCTRSCLI(LightningCLI):
             default="lightning_logs",
             help="A name to identify identify similar runs",
         )
-        parser.add_argument(
-            "--version",
-            type=str | None,
-            default=None,
-            help="A version number/name to identify this run",
-        )
 
         parser.link_arguments(
             "trainer.default_root_dir",
