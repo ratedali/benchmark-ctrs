@@ -17,7 +17,7 @@ class GaussianAug(BaseModule):
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=self.ignore_hyperparameters)
         self.criterion = criterion or CrossEntropyLoss()
 
     @override

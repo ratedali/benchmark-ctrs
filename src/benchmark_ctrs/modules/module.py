@@ -169,6 +169,10 @@ class BaseModule(L.LightningModule):
     def eval_model(self) -> nn.Module:
         return self.model
 
+    @property
+    def ignore_hyperparameters(self) -> list[str]:
+        return ["certification", "certification_params", "grads_log_interval"]
+
     def init_model(self) -> None:
         if self.architecture == "lenet":
             self.raw_model = LeNet()

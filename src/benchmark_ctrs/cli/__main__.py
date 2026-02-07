@@ -112,10 +112,10 @@ class BenchmarkCTRSCLI(LightningCLI):
         )
 
         parser.link_arguments(
-            "trainer.default_root_dir", "trainer.logger.init_args.save_dir"
+            "trainer.default_root_dir",
+            "trainer.logger.init_args.save_dir",
         )
         parser.link_arguments("name", "trainer.logger.init_args.name")
-        parser.link_arguments("version", "trainer.logger.init_args.version")
 
         # Optimizer and learning rates scheduler
         parser.add_argument(
