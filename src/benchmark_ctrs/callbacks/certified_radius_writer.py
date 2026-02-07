@@ -1,11 +1,10 @@
-from collections.abc import Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from csv import DictWriter
 from pathlib import Path
 from typing import Any, Final, cast
 
 import lightning as L
 from lightning.pytorch.callbacks import BasePredictionWriter
-from lightning.pytorch.utilities import rank_zero_only
 from typing_extensions import override
 
 from benchmark_ctrs.modules import Batch, PredictionResult
@@ -30,32 +29,38 @@ class CertifiedRadiusWriter(BasePredictionWriter):
         if self._outdir is not None and not self._outdir.is_dir():
             raise ValueError(f"{outdir} is not a directory.")
 
-        self.filenames = {
-            "cert": (filename, CERT_FIELDS),
-            "clean": (clean_filename, CLEAN_FIELDS),
-        }
         self.overwrite = overwrite
 
+        self.cert_output = (filename, CERT_FIELDS) if filename else None
+        self.clean_output = (clean_filename, CLEAN_FIELDS) if clean_filename else None
+
+    @property
+    def outputs(self) -> list[tuple[str, Collection[str]]]:
+        outputs = []
+        if self.cert_output:
+            outputs.append(self.cert_output)
+        if self.clean_output:
+            outputs.append(self.clean_output)
+        return outputs
+
     @override
-    @rank_zero_only
     def on_predict_epoch_start(
         self,
         trainer: L.Trainer,
         pl_module: L.LightningModule,
     ) -> None:
-        for filename, header in self.filenames.values():
-            if filename:
-                path = self._resolve_output_path(trainer, filename)
+        for filename, header in self.outputs:
+            path = self._resolve_output_path(trainer, filename)
 
-                if path.exists() and not self.overwrite:
-                    raise ValueError(f"{path} exists, and overwite=False")
+            if path.exists() and not self.overwrite:
+                raise RuntimeError(f"{path} already exists, and overwite=False")
 
+            if trainer.global_rank == 0:
                 with path.open("tw") as f:
                     writer = DictWriter(f, fieldnames=header)
                     writer.writeheader()
 
     @override
-    @rank_zero_only
     def write_on_batch_end(
         self,
         trainer: L.Trainer,
@@ -66,10 +71,13 @@ class CertifiedRadiusWriter(BasePredictionWriter):
         *args: Any,
         **kwargs: Any,
     ) -> None:
+        if prediction is None:
+            return
+
         if not isinstance(prediction, dict) or "clean" not in prediction:
             raise TypeError(
-                "`predict_step` should return `benchmark_ctrs.modules.PredictionResult`"
-                " instance from global rank 0."
+                "`predict_step` should return a dict which is a "
+                "`benchmark_ctrs.modules.PredictionResult` instance"
             )
         prediction = cast("PredictionResult", prediction)
 
@@ -77,53 +85,54 @@ class CertifiedRadiusWriter(BasePredictionWriter):
             raise ValueError("Batch indices is required")
 
         batch_indices = list(batch_indices)
-        _inputs, targets = batch
+        _inputs, targets = batch[:2]
+
         targets = cast("list[int]", targets.long().tolist())
         predictions: list[float] = prediction["clean"].view(-1).tolist()
 
-        clean_filename, clean_header = self.filenames["clean"]
-        if clean_filename:
-            clean_path = self._resolve_output_path(trainer, clean_filename)
+        clean_rows = [
+            {
+                "idx": batch_indices[i],
+                "label": targets[i],
+                "predict": int(pred),
+                "correct": 1 if pred == targets[i] else 0,
+            }
+            for i, pred in enumerate(predictions)
+        ]
+        self._write_rows(trainer, clean_rows, self.clean_output)
 
-            if len(predictions) > 0:
-                with clean_path.open("at") as f:
-                    writer = DictWriter(f, fieldnames=clean_header)
-                    writer.writerows(
-                        [
-                            {
-                                "idx": batch_indices[i],
-                                "label": targets[i],
-                                "predict": int(pred),
-                                "correct": 1 if pred == targets[i] else 0,
-                            }
-                            for i, pred in enumerate(predictions)
-                        ]
-                    )
-
-        cert_filename, cert_header = self.filenames["cert"]
-        if cert_filename and "certification" in prediction:
-            cert_path = self._resolve_output_path(trainer, cert_filename)
-
+        if "certification" in prediction:
             cert = prediction["certification"]
             indices: list[int] = cert.indices.view(-1).long().tolist()
             predictions: list[float] = cert.predictions.view(-1).tolist()
             radii: list[float] = cert.radii.view(-1).tolist()
 
-            if len(indices) > 0:
-                with cert_path.open("at") as f:
-                    writer = DictWriter(f, fieldnames=cert_header)
-                    writer.writerows(
-                        [
-                            {
-                                "idx": batch_indices[i],
-                                "label": targets[i],
-                                "predict": predictions[i],
-                                "radius": radii[i],
-                                "correct": int(predictions[i] == targets[i]),
-                            }
-                            for i in indices
-                        ]
-                    )
+            cert_rows = [
+                {
+                    "idx": batch_indices[i],
+                    "label": targets[i],
+                    "predict": predictions[i],
+                    "radius": radii[i],
+                    "correct": int(predictions[i] == targets[i]),
+                }
+                for i in indices
+            ]
+            self._write_rows(trainer, cert_rows, self.cert_output)
+
+    def _write_rows(
+        self,
+        trainer: L.Trainer,
+        rows: Iterable[Mapping[str, Any]],
+        output: tuple[str, Collection[str]] | None,
+    ) -> None:
+        if output is None:
+            return
+        filename, header = output
+        cert_path = self._resolve_output_path(trainer, filename)
+
+        with cert_path.open("at") as f:
+            writer = DictWriter(f, fieldnames=header)
+            writer.writerows(rows)
 
     def _resolve_output_path(self, trainer: L.Trainer, filename: str) -> Path:
         if self._outdir:

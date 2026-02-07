@@ -6,7 +6,7 @@ from typing import Any, Literal, cast
 import lightning as L
 import torch
 from lightning.pytorch.loggers import TensorBoardLogger
-from lightning.pytorch.utilities import grad_norm, rank_zero_only
+from lightning.pytorch.utilities import grad_norm
 from lightning.pytorch.utilities.types import STEP_OUTPUT
 from torch import Tensor, nn
 from torch.optim import SGD, Optimizer, lr_scheduler
@@ -399,21 +399,32 @@ class BaseModule(L.LightningModule):
     ) -> StepOutput: ...
 
     @override
-    def predict_step(self, batch: Batch, *args: Any, **kwargs: Any) -> PredictionResult:
+    def predict_step(
+        self,
+        batch: Batch,
+        *args: Any,
+        **kwargs: Any,
+    ) -> PredictionResult | None:
         inputs = batch[0]
+
+        clean = self.forward(inputs).argmax(dim=1)
         result: PredictionResult = {
-            "clean": self.forward(inputs).argmax(dim=1),
+            "clean": cast("Tensor", self.all_gather(clean)).view(-1)
         }
+
         if self.metric_predict_cert:
             self.metric_predict_cert.update(inputs)
-            cert = cast("cr.CertificationResult", self.metric_predict_cert.compute())
+            result["certification"] = cast(
+                "cr.CertificationResult",
+                self.metric_predict_cert.compute(),
+            )
             self.metric_predict_cert.reset()
 
-            if self.trainer.is_global_zero:
-                result["certification"] = cert
-        return result
+        if self.trainer.is_global_zero:
+            return result
 
-    @rank_zero_only
+        return None
+
     def log_grad_norms(self, norm_type: float | str = 2) -> None:
         """Utility to compute and log grad norms.
 
@@ -428,12 +439,21 @@ class BaseModule(L.LightningModule):
         self.log(
             "backprop/grad_l2_norm_total",
             norms.get(total_key, 0.0),
+            sync_dist=True,
         )
 
         if isinstance(self.logger, TensorBoardLogger):
+            all_norms = cast("dict[str, Tensor | float]", self.all_gather(norms))
+            all_norms = torch.tensor(
+                [
+                    val.mean().item() if isinstance(val, Tensor) else val
+                    for k, val in all_norms.items()
+                    if k != total_key
+                ]
+            )
             tensorboard = cast("SummaryWriter", self.logger.experiment)
             tensorboard.add_histogram(
                 tag="backprop/grad_l2_norms",
-                values=torch.tensor([v for k, v in norms.items() if k != total_key]),
+                values=all_norms,
                 global_step=self.trainer.global_step,
             )
