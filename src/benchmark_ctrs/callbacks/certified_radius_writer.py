@@ -109,13 +109,13 @@ class CertifiedRadiusWriter(BasePredictionWriter):
 
             cert_rows = [
                 {
-                    "idx": batch_indices[i],
-                    "label": targets[i],
+                    "idx": batch_indices[batch_idx],
+                    "label": targets[batch_idx],
                     "predict": predictions[i],
                     "radius": radii[i],
                     "correct": int(predictions[i] == targets[i]),
                 }
-                for i in indices
+                for i, batch_idx in enumerate(indices)
             ]
             self._write_rows(trainer, cert_rows, self.cert_output)
 
