@@ -27,20 +27,16 @@ class ImageNet(BaseDataModule):
     def __init__(self, *args: Any, batch_size: int = 64, **kwargs: Any) -> None:
         super().__init__(*args, batch_size=batch_size, **kwargs)
         self.name = "imagenet"
-        self.__train_transforms = Compose(
-            [
-                RandomResizedCrop(224),
-                RandomHorizontalFlip(),
-                ToTensor(),
-            ],
-        )
-        self.__test_transforms = Compose(
-            [
-                Resize(256),
-                CenterCrop(224),
-                ToTensor(),
-            ],
-        )
+        self.__train_transforms = [
+            RandomResizedCrop(224),
+            RandomHorizontalFlip(),
+            ToTensor(),
+        ]
+        self.__test_transforms = [
+            Resize(256),
+            CenterCrop(224),
+            ToTensor(),
+        ]
 
     def prepare_data(self) -> None:
         imagenet.ImageNet(self.cache_dir, split="train")
@@ -51,7 +47,7 @@ class ImageNet(BaseDataModule):
             dataset = imagenet.ImageNet(
                 self.cache_dir,
                 split="train",
-                transform=self.__train_transforms,
+                transform=Compose(self.__train_transforms),
             )
             if self.validation > 0:
                 total = len(dataset) if isinstance(self.validation, int) else 1.0
@@ -65,7 +61,7 @@ class ImageNet(BaseDataModule):
             dataset = imagenet.ImageNet(
                 self.cache_dir,
                 split="val",
-                transform=self.__test_transforms,
+                transform=Compose(self.__test_transforms),
             )
             if stage == "test":
                 self._test = dataset
