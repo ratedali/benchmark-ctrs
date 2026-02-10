@@ -14,45 +14,54 @@ __all__ = [
 ]
 
 
-def GradualStepLR(
-    optimizer: Optimizer,
-    warmup_factor: float = 0.1,
-    warmup_iters: int = 1,
-    step_size: int = 50,
-    gamma: float = 0.1,
-) -> lr_scheduler.LRScheduler:
-    warmup_phase = lr_scheduler.ConstantLR(
-        optimizer, factor=warmup_factor, total_iters=warmup_iters
-    )
-    normal_phase = lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
-    return lr_scheduler.SequentialLR(
-        optimizer,
-        [warmup_phase, normal_phase],
-        milestones=[warmup_iters],
-    )
+class SequentialLR(lr_scheduler.SequentialLR):
+    def __init__(
+        self,
+        optimizer: Optimizer,
+        schedulers: list[LRSchedulerCallable],
+        milestones: list[int],
+        last_epoch: int = -1,
+    ) -> None:
+        super().__init__(
+            optimizer,
+            schedulers=[scheduler(optimizer) for scheduler in schedulers],
+            milestones=milestones,
+            last_epoch=last_epoch,
+        )
 
 
-def SequentialLR(
-    optimizer: Optimizer,
-    schedulers: list[LRSchedulerCallable],
-    milestones: list[int],
-    last_epoch: int = -1,
-) -> lr_scheduler.SequentialLR:
-    return lr_scheduler.SequentialLR(
-        optimizer,
-        schedulers=[scheduler(optimizer) for scheduler in schedulers],
-        milestones=milestones,
-        last_epoch=last_epoch,
-    )
+class GradualStepLR(lr_scheduler.SequentialLR):
+    def __init__(
+        self,
+        optimizer: Optimizer,
+        warmup_factor: float = 0.1,
+        warmup_iters: int = 1,
+        step_size: int = 50,
+        gamma: float = 0.1,
+    ) -> None:
+        warmup_phase = lr_scheduler.ConstantLR(
+            optimizer,
+            factor=warmup_factor,
+            total_iters=warmup_iters,
+        )
+        normal_phase = lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+        super().__init__(
+            optimizer,
+            [warmup_phase, normal_phase],
+            milestones=[warmup_iters],
+        )
 
 
-def ChainedLR(
-    optimizer: Optimizer, schedulers: list[LRSchedulerCallable]
-) -> lr_scheduler.ChainedScheduler:
-    return lr_scheduler.ChainedScheduler(
-        schedulers=[scheduler(optimizer) for scheduler in schedulers],
-        optimizer=optimizer,
-    )
+class ChainedLR(lr_scheduler.ChainedScheduler):
+    def __init__(
+        self,
+        optimizer: Optimizer,
+        schedulers: list[LRSchedulerCallable],
+    ) -> None:
+        super().__init__(
+            schedulers=[scheduler(optimizer) for scheduler in schedulers],
+            optimizer=optimizer,
+        )
 
 
 def check_valid_step_output(value: STEP_OUTPUT) -> TypeIs[StepOutput]:

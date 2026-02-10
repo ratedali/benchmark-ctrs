@@ -176,10 +176,13 @@ class BaseModule(L.LightningModule):
     def init_model(self) -> None:
         if self.architecture == "lenet":
             self.raw_model = LeNet()
-        elif resnet := resnet_arch_info(self.architecture):
-            variant, depth = resnet
-            if variant == "cifar":
-                self.raw_model = cifar_resnet(depth=depth, num_classes=self.num_classes)
+        elif (
+            resnet := resnet_arch_info(self.architecture)
+        ) and resnet.variant == "cifar":
+            self.raw_model = cifar_resnet(
+                depth=resnet.depth,
+                num_classes=self.num_classes,
+            )
 
         if not hasattr(self, "raw_model"):
             try:
