@@ -302,14 +302,17 @@ class BaseModule(L.LightningModule):
         if outputs is not None:
             with torch.no_grad():
                 if "loss" in outputs:
-                    loss = outputs["loss"]
+                    loss = outputs["loss"].detach()
                     if loss.dim() > 0:
                         batch_size = batch[0].size(0)
                         loss = loss.sum() / batch_size
                     self.metric_loss_train(loss.item())
 
                 if self.automatic_accuracy and "predictions" in outputs:
-                    self.metric_acc_train.update(outputs["predictions"], batch[1])
+                    self.metric_acc_train.update(
+                        outputs["predictions"].detach(),
+                        batch[1],
+                    )
 
         if self.metric_loss_train.update_called:
             self.log("train/loss", self.metric_loss_train, on_epoch=True)
