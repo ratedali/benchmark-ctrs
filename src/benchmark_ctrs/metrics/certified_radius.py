@@ -113,12 +113,14 @@ class CertifiedRadius(Metric):
             device=self.device,
             dtype=torch.long,
         )
+        inputs = inputs[indices, ...]
+        if targets is not None:
+            targets = targets[indices, ...]
 
         if targets is not None:
-            batch = (inputs[indices, ...], targets[indices])
             certs = self._certifier.certify_batch(
                 self._model,
-                batch,
+                (inputs, targets),
                 sigma=self._sigma,
                 alpha=self._alpha,
                 num_classes=self._num_classes,
@@ -126,7 +128,7 @@ class CertifiedRadius(Metric):
         else:
             certs = self._certifier.predict_batch(
                 self._model,
-                inputs[indices, ...],
+                inputs,
                 sigma=self._sigma,
                 alpha=self._alpha,
                 num_classes=self._num_classes,
@@ -147,8 +149,9 @@ class CertifiedRadius(Metric):
         )
 
         if targets is not None:
-            radii[targets[indices] != predictions] = (
-                torch.inf if self._reduction == "min" else 0.0
+            radii.masked_fill_(
+                targets != predictions,
+                0 if self._reduction != "min" else torch.inf,
             )
 
         if self._reduction == "mean":
@@ -159,8 +162,8 @@ class CertifiedRadius(Metric):
         elif self._reduction == "min":
             self._radius = torch.min(self._radius, radii.min())
         else:
-            self._radii.append(radii)
             self._indices.append(indices)
+            self._radii.append(radii)
             self._predictions.append(predictions)
 
     @torch.inference_mode()
@@ -188,8 +191,8 @@ class CertifiedRadius(Metric):
         if self._reduction == "max":
             return self._radius
 
-        radii = dim_zero_cat(self._radii)
         indices = dim_zero_cat(self._indices)
+        radii = dim_zero_cat(self._radii)
         predictions = dim_zero_cat(self._predictions)
         return CertificationResult(
             indices=indices,

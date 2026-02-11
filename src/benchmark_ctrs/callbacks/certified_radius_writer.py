@@ -82,7 +82,7 @@ class CertifiedRadiusWriter(BasePredictionWriter):
         prediction = cast("PredictionResult", prediction)
 
         if batch_indices is None:
-            raise ValueError("Batch indices is required")
+            raise ValueError("Batch indices are required")
 
         batch_indices = list(batch_indices)
         _inputs, targets = batch[:2]
@@ -113,7 +113,7 @@ class CertifiedRadiusWriter(BasePredictionWriter):
                     "label": targets[batch_idx],
                     "predict": predictions[i],
                     "radius": radii[i],
-                    "correct": int(predictions[i] == targets[i]),
+                    "correct": int(predictions[i] == targets[batch_idx]),
                 }
                 for i, batch_idx in enumerate(indices)
             ]

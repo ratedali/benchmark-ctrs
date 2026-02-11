@@ -356,7 +356,7 @@ class BaseModule(L.LightningModule):
                 f"'loss' and 'predictions', got value: {outputs}"
             )
 
-        inputs, targets, *_ = batch
+        inputs, targets = batch[:2]
 
         if outputs is not None:
             if "loss" in outputs:
