@@ -1,6 +1,6 @@
 """
-Train, test and compare certified training for randmoized smoothing robsutness
-certification against standard benchmarks.
+Train, test, and compare certified training methods for randomized smoothing
+robustness certification against standard benchmarks.
 """
 
 __version__ = "11.1.16"

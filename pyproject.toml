@@ -22,10 +22,10 @@ dependencies = [
     "torch",
     "torchvision",
     "lightning[extra]",
-    "torchmetrics",  
+    "torchmetrics",
     "numpy",
     "scipy",
-    "statsmodels",      
+    "statsmodels",
     "pluggy",                        # required for logging with torch.util.tensorboard
 ]
 
@@ -34,8 +34,8 @@ dev = ["ruff"]
 results = ["pandas", "tbparse"]
 
 [project.urls]
-Homepage = "https://github.com/ratedali/benchmark_ctrs"
-Issues = "https://github.com/ratedali/benchmark_ctrs/issues"
+Homepage = "https://github.com/ratedali/benchmark-ctrs"
+Issues = "https://github.com/ratedali/benchmark-ctrs/issues"
 
 [project.scripts]
 benchmark-ctrs = "benchmark_ctrs.cli.__main__:main"
@@ -105,7 +105,7 @@ select = [
     "T20",
     # flake8-type-checking
     "TC",
-    # flake8-tidy-imports 
+    # flake8-tidy-imports
     "TID",
     # Pylint
     "PLE",
